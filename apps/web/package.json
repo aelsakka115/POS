@@ -1,0 +1,7 @@
+{
+  "name": "@cafe-engine/web",
+  "private": true,
+  "version": "0.0.0",
+  "description": "React frontend — feature-first, RFC-004 §7. Scaffolded in Bootstrap Phase 5.",
+  "type": "module"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@cafe-engine/config",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Shared tsconfig / eslint / tailwind base configuration — RFC-004 §4",
+  "files": [
+    "tsconfig.base.json",
+    "eslint.base.cjs"
+  ]
+}
