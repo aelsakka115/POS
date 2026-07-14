@@ -73,7 +73,7 @@ Full detail: **RFC-005 §2.2, §3**.
 
 - **No direct cross-domain imports.** Ever. Cross-domain data needs go through a Read Model or an event (RFC-004 §5.2).
 - **No business rule is re-implemented outside the domain that owns it.** If you need it, consume it — don't duplicate it.
-- **No new event or Capability ID is invented silently.** It must exist in RFC-002/RFC-003 first (RFC-005 §6.1).
+- **No new event or Capability ID is invented silently, and none is ever defined outside `packages/domain-contracts`.** It must exist in RFC-002/RFC-003 first, then be added to `packages/domain-contracts` — never inlined locally in `apps/backend` or `apps/web`, not even temporarily (RFC-005 §6.1; see `packages/domain-contracts/README.md`).
 - **No business behavior changes without the Change Management Process.** No exceptions for "small" changes (RFC-005 §5).
 - **No deferred documentation.** If behavior changes, the Domain Document updates in the same PR (RFC-005 §4.1).
 - **No frozen ADR is overridden.** Not by a new feature, not by a workaround, not "just this once."
