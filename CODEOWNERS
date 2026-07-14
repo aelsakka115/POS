@@ -1,0 +1,30 @@
+# CODEOWNERS
+#
+# This file is a technical enforcement of ownership/approval rules already defined in
+# RFC-005 §5 (Change Management Process) and §6 (Engineering Decision Process).
+# It does not introduce new governance — it makes existing governance unbypassable.
+#
+# Kept intentionally minimal for the current project stage (single Lead Architect,
+# no specialized team yet). Extend by adding lines, not by restructuring this file —
+# see CONTRIBUTING.md §3 for the repository layout this maps to.
+
+# Fallback: anything not explicitly matched below still requires review.
+* @aelsakka115
+
+# Living architecture & documentation — any change here is, by definition, either a
+# Documentation Update (RFC-005 §4) or a Change Management change (RFC-005 §5).
+/docs/** @aelsakka115
+
+# Shared contracts — the single source of truth for event/type shapes across every
+# domain (RFC-004 SA-ADR-03) and the arbiter between AI agents (RFC-005 §2.5).
+# Highest blast radius in the repository.
+/packages/domain-contracts/** @aelsakka115
+
+# Governance artifacts protecting themselves — PR/Issue templates, CI, and this
+# file itself.
+/.github/** @aelsakka115
+
+# Infrastructure and database — schema, migrations, and any infrastructure
+# configuration. High blast radius, hard to reverse, often cross-domain
+# (e.g. the shared event_outbox table).
+/database/** @aelsakka115
