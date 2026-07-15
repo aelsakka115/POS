@@ -3,5 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "description": "Domain logic — 4-layer structure per domain, RFC-004 §6. Scaffolded in Bootstrap Phase 4.",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
 }
+
