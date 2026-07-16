@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Install, Typecheck, Lint, Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  governance:
+    name: Governance Artifacts Present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required governance artifacts exist
+        run: |
+          set -e
+          test -d docs || { echo "::error::Missing docs/ (architecture is not optional)"; exit 1; }
+          test -f CONTRIBUTING.md || { echo "::error::Missing CONTRIBUTING.md"; exit 1; }
+          test -f CODEOWNERS || { echo "::error::Missing CODEOWNERS"; exit 1; }
+          test -f .github/PULL_REQUEST_TEMPLATE.md || { echo "::error::Missing .github/PULL_REQUEST_TEMPLATE.md"; exit 1; }
+          test -f .github/ISSUE_TEMPLATE/task.md || { echo "::error::Missing .github/ISSUE_TEMPLATE/task.md"; exit 1; }
+          echo "All required governance artifacts present."
