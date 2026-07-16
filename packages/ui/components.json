@@ -1,0 +1,17 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "../../apps/web/tailwind.config.ts",
+    "css": "../../apps/web/src/index.css",
+    "baseColor": "zinc",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@cafe-engine/ui/components",
+    "utils": "@cafe-engine/ui/lib/cn",
+    "ui": "@cafe-engine/ui/components/ui"
+  }
+}

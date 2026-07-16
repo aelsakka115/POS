@@ -2,8 +2,16 @@
   "name": "@cafe-engine/ui",
   "private": true,
   "version": "0.0.0",
-  "description": "Shared design-system components and Design Tokens — RFC-004 §10",
+  "description": "Shared design-system components and Design Tokens — RFC-004 §10. shadcn/ui components added incrementally as real screens need them.",
   "type": "module",
   "main": "./src/index.ts",
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
+  }
 }
+
