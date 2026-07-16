@@ -39,14 +39,48 @@
 
 ## Definition of "Bootstrap Complete"
 
-Bootstrap is complete when **all of the following are simultaneously true**:
+Bootstrap has **two distinct completion states** — conflating them would mean
+declaring success on a condition that was never actually tested.
 
-- [ ] All 7 phases above have passed their validation checkpoint.
-- [ ] A test PR using `.github/PULL_REQUEST_TEMPLATE.md` was opened, reviewed, and merged successfully through the real CI + CODEOWNERS gate.
-- [ ] `packages/domain-contracts` is the only place any event or Capability ID shape is defined — confirmed by inspection, not assumption.
-- [ ] No domain-specific business logic has been written yet — Bootstrap produces structure and contracts only, never implementation (that starts immediately after, with **Sales**, per RFC-004 §13).
+### Bootstrap Complete (Local)
 
-Once this is true, the project moves from "Bootstrap" to "Implementation," starting with the Sales domain.
+Everything achievable without a real GitHub repository:
+
+- [x] All 7 phases passed their validation checkpoint.
+- [x] `packages/domain-contracts` is the only place any event or Capability ID
+      shape is defined — confirmed by inspection.
+- [x] No domain-specific business logic has been written — structure and
+      contracts only.
+- [x] Full local CI sequence (`npm ci → typecheck → lint → build`) runs
+      end-to-end successfully.
+- [x] Governance artifacts (`docs/`, `CONTRIBUTING.md`, `CODEOWNERS`, PR/Issue
+      templates) verified present via the same commands the CI governance
+      job runs.
+
+**Status: ✅ Reached.**
+
+### Bootstrap Complete (Verified)
+
+Requires a real GitHub repository — cannot be satisfied locally, regardless
+of how much local validation is done:
+
+- [ ] 1. Repository pushed to GitHub.
+- [ ] 2. Branch Protection configured per `.github/BRANCH_PROTECTION.md`.
+- [ ] 3. `CODEOWNERS` verified active (GitHub recognizes and enforces it).
+- [ ] 4. PR Template verified — appears automatically on a new PR.
+- [ ] 5. Issue Template verified — appears in the Issue creation flow.
+- [ ] 6. CI (`.github/workflows/ci.yml`) runs successfully on GitHub's own
+      runners, not just locally.
+- [ ] 7. A real test PR opened, passes CI + required CODEOWNERS review, and
+      merges successfully.
+
+**Status: ⏳ Pending — requires pushing to GitHub, outside this environment.**
+
+---
+
+**Implementation of the Sales domain does not begin until Bootstrap Complete
+(Verified) is reached.** Bootstrap Complete (Local) is a real, meaningful
+milestone — it is not the same milestone, and is not sufficient on its own.
 
 ---
 
