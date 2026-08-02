@@ -6,7 +6,11 @@ import type { Config } from "tailwindcss";
 // decision for when real UI is built, not Bootstrap.
 export default {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+    "../../packages/ui/src/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       colors: {

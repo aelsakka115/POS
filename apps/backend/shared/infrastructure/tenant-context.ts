@@ -1,3 +1,5 @@
+import type { TenantScoped } from "@cafe-engine/domain-contracts";
+
 /**
  * ITenantContext — resolves and applies tenant identity for every request.
  * No concrete implementation exists yet.
@@ -9,9 +11,7 @@
  * the first domain use case actually needs to enforce tenant isolation,
  * not speculatively during Bootstrap.
  */
-export interface TenantContext {
-  readonly tenantId: string;
-}
+export type TenantContext = TenantScoped;
 
 export interface ITenantContextResolver {
   /** Resolve tenant identity from an authenticated request. Mechanism-agnostic. */

@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cafe-engine/domain-contracts": "*"
   }
 }
-
