@@ -399,13 +399,14 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 ```
 Shift Management  --ShiftOpened-->             Sales (Read Model), Reporting
 Shift Management  --ShiftClosed-->              Sales (Read Model), Reporting, Notifications
-Sales             --OrderPlaced-->              Order Fulfillment, Shift Management (عدّاد)
-Menu              --MenuItemActivated/PriceChanged/Deactivated--> Sales (MenuItemSalesReadModel), Reporting
+Sales             --OrderPlaced-->              Order Fulfillment, Shift Management (عدّاد), Reporting
+Menu              --MenuItemActivated/MenuItemDeactivated--> Sales (MenuItemSalesReadModel), Order Fulfillment, Reporting
+Menu              --MenuItemPriceChanged-->         Sales (MenuItemSalesReadModel), Reporting
 Order Fulfillment --OrderReady-->               Notifications, Reporting
 Order Fulfillment --OrderServed-->              Sales (لإغلاق/إتمام المعاملة), Reporting
 Order Fulfillment --OrderCancelled/Rejected-->  Sales, Notifications, Reporting, Shift Management (عدّاد)
 Sales             --SaleCompleted-->            Inventory, CRM, Reporting, Notifications, Shift Management (عدّاد)
-Menu              --ModifierRecipeImpactUpdated--> Inventory
+Menu              --ModifierRecipeImpactUpdated--> Inventory, Reporting
 Inventory         --ItemAvailabilityChanged-->  Sales (Read Model), Order Fulfillment, Reporting
 Inventory         --InventoryMovementRecorded--> Reporting
 Suppliers & Business Accounts --SupplierCreated--> Purchasing (Read Model), Reporting
@@ -416,9 +417,9 @@ Suppliers & Business Accounts --SupplierPaymentOverdue--> Notifications, Reporti
 Inventory         --StockLevelLow-->            Notifications, Reporting
 Inventory         --StockCountFinalized-->      Reporting
 Attendance        --WorkingHoursCalculated-->   Reporting, Payroll
-Menu              --RecipeUpdated-->            Inventory (لإعادة حساب متطلبات المكونات)
+Menu              --RecipeUpdated-->            Inventory (لإعادة حساب متطلبات المكونات), Reporting
 CRM               --CustomerCreated-->          Reporting
-CRM               --DiscountEligibilityFlagged--> Sales (اقتراح فقط؛ Sales تقرر التطبيق)
+CRM               --DiscountEligibilityFlagged--> Sales (اقتراح فقط؛ Sales تقرر التطبيق), Reporting
 Attendance        --AttendanceExceptionRaised--> Notifications, Reporting, Payroll
 Staff             --EmployeeCreated/Updated/Activated/Deactivated/Transferred/Terminated--> Attendance (RM), Payroll (RM), Expenses (RM), Reporting
 Expenses          --ExpenseRecorded/Cancelled/Corrected--> Reporting

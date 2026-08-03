@@ -136,16 +136,19 @@
 Suppliers & Business Accounts → SupplierCreated/SupplierDeactivated → Purchasing (RM), Reporting
 Purchasing        → PurchaseOrderCreated/Cancelled     → Reporting
 Purchasing        → GoodsReceived                       → Inventory, Reporting, Suppliers & Business Accounts (اختياري)
-Suppliers & Business Accounts → PurchaseInvoiceRecorded/PaymentRecorded/SupplierPaymentOverdue → Reporting, Notifications
+Suppliers & Business Accounts → PurchaseInvoiceRecorded/PaymentRecorded → Reporting
+Suppliers & Business Accounts → SupplierPaymentOverdue → Notifications, Reporting
 
 Inventory         → StockItemCreated/Deactivated         → Menu (RM), Purchasing (RM), Reporting
 Staff             → EmployeeCreated/Updated/Activated/Deactivated/Transferred/Terminated → Attendance (RM), Payroll (RM), Expenses (RM), Reporting
-Menu              → RecipeUpdated/ModifierRecipeImpactUpdated → Inventory
-Menu              → MenuItemActivated/Deactivated/PriceChanged → Sales, Order Fulfillment, Reporting
+Menu              → RecipeUpdated/ModifierRecipeImpactUpdated → Inventory, Reporting
+Menu              → MenuItemActivated/MenuItemDeactivated → Sales, Order Fulfillment, Reporting
+Menu              → MenuItemPriceChanged               → Sales, Reporting
 
-Shift Management  → ShiftOpened/ShiftClosed              → Sales (RM), Reporting, Notifications
+Shift Management  → ShiftOpened                          → Sales (RM), Reporting
+Shift Management  → ShiftClosed                          → Sales (RM), Reporting, Notifications
 
-Sales             → OrderPlaced                          → Order Fulfillment, Shift Management (عدّاد)
+Sales             → OrderPlaced                          → Order Fulfillment, Shift Management (عدّاد), Reporting
 Order Fulfillment → OrderReady                            → Notifications, Reporting
 Order Fulfillment → OrderServed                            → Sales, Reporting
 Order Fulfillment → OrderCancelled/OrderRejected           → Sales, Notifications, Reporting, Shift Management (عدّاد)
@@ -159,7 +162,7 @@ Inventory         → ItemAvailabilityChanged                 → Sales (RM), Or
 Inventory         → InventoryMovementRecorded                → Reporting
 
 CRM               → CustomerCreated                          → Reporting
-CRM               → DiscountEligibilityFlagged                → Sales
+CRM               → DiscountEligibilityFlagged                → Sales, Reporting
 
 Attendance        → WorkingHoursCalculated                   → Reporting, Payroll
 Attendance        → AttendanceExceptionRaised                → Notifications, Reporting, Payroll

@@ -58,7 +58,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Sales |
-| **Subscribers** | Order Fulfillment, Shift Management (عدّاد الطلبات المفتوحة) |
+| **Subscribers** | Order Fulfillment, Shift Management (عدّاد الطلبات المفتوحة), Reporting |
 | **Trigger** | العميل/الكاشير يُنشئ طلبًا جديدًا ببنوده (Order Lines) ويُرسله للتنفيذ |
 | **Payload (High-Level)** | `eventName: "OrderPlaced", tenantId, orderId, branchId, shiftId, createdByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice: Money, selectedModifierIds[], notes?}], createdAt` |
 | **Business Meaning** | "هذا الطلب مُعتمَد للبيع ويحتاج تنفيذًا فعليًا في المطبخ/محطة العمل" |
@@ -153,7 +153,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Order Fulfillment |
-| **Subscribers** | Sales, Notifications, Shift Management (عدّاد الطلبات المفتوحة) |
+| **Subscribers** | Sales, Notifications, Reporting, Shift Management (عدّاد الطلبات المفتوحة) |
 | **Trigger** | رفض محطة العمل تنفيذ الطلب (مثال: نفاد مكوّن أساسي مكتشف وقت التحضير) |
 | **Payload (High-Level)** | `orderId, tenantId, branchId, rejectedReason, rejectedAt` |
 | **Business Meaning** | "تعذّر تنفيذ الطلب تشغيليًا رغم قبوله ماليًا من Sales — يحتاج تدخلًا فوريًا" |
@@ -381,7 +381,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Menu |
-| **Subscribers** | Inventory |
+| **Subscribers** | Inventory, Reporting |
 | **Trigger** | تعديل مكونات/كميات وصفة منتج قائم |
 | **Payload (High-Level)** | `recipeId, recipeVersion, menuItemId, tenantId, ingredients[{stockItemId, quantityRequired}], updatedAt` |
 | **Business Meaning** | "تغيّرت متطلبات الإنتاج لهذا الصنف؛ عمليات الخصم المستقبلية عند البيع يجب أن تستخدم النسخة الجديدة. **لا تؤثر بأي شكل على حركات مخزون سابقة** — تلك تحتفظ بالكميات الفعلية كأرقام ثابتة (Immutable Snapshot) بغض النظر عن أي تعديل لاحق" |
@@ -433,7 +433,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Menu |
-| **Subscribers** | Inventory |
+| **Subscribers** | Inventory, Reporting |
 | **Trigger** | تعريف أو تعديل تأثير Modifier معيّن على الوصفة (استبدال مكوّن أو إضافة كمية) |
 | **Payload (High-Level)** | `modifierId, tenantId, impactType (substitute/addition), targetStockItemId, substituteStockItemId?, quantityDelta, updatedAt` |
 | **Business Meaning** | "اختيار هذا الـ Modifier وقت البيع يجب أن يُغيّر فعليًا استهلاك المخزون المتوقع لهذا المنتج" |
@@ -463,7 +463,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | CRM |
-| **Subscribers** | Sales |
+| **Subscribers** | Sales, Reporting |
 | **Trigger** | استيفاء العميل لشرط أهلية خصم (بناءً على قواعد CRM — تاريخ شراء، ولاء...) |
 | **Payload (High-Level)** | `customerId, tenantId, eligibleDiscountType, eligibleValue, validUntil?, reason` |
 | **Business Meaning** | **اقتراح فقط، وليس قرارًا** — "هذا العميل مؤهَّل لخصم كذا، والقرار النهائي بالتطبيق أو الرفض يعود حصريًا لـ Sales" |
@@ -711,14 +711,14 @@
 |-------|--------|-----------|
 | ShiftOpened | Shift Management | Sales (Read Model), Reporting |
 | ShiftClosed | Shift Management | Sales (Read Model), Reporting, Notifications |
-| OrderPlaced | Sales | Order Fulfillment, Shift Management |
+| OrderPlaced | Sales | Order Fulfillment, Shift Management, Reporting |
 | SaleCompleted | Sales | Inventory, CRM, Reporting, Notifications, Shift Management |
 | SaleRefunded | Sales | Inventory, CRM, Reporting, Notifications |
 | DiscountApplied | Sales | Reporting, CRM |
 | OrderReady | Order Fulfillment | Notifications, Reporting |
 | OrderServed | Order Fulfillment | Sales, Reporting |
 | OrderCancelled | Order Fulfillment | Sales, Notifications, Reporting, Shift Management |
-| OrderRejected | Order Fulfillment | Sales, Notifications, Shift Management |
+| OrderRejected | Order Fulfillment | Sales, Notifications, Reporting, Shift Management |
 | StockLevelLow | Inventory | Notifications, Reporting |
 | StockCountFinalized | Inventory | Reporting |
 | StockAdjusted | Inventory | Reporting |
@@ -734,13 +734,13 @@
 | PurchaseInvoiceRecorded | Suppliers & Business Accounts | Reporting |
 | PaymentRecorded | Suppliers & Business Accounts | Reporting |
 | SupplierPaymentOverdue | Suppliers & Business Accounts | Notifications, Reporting |
-| RecipeUpdated | Menu | Inventory |
-| ModifierRecipeImpactUpdated | Menu | Inventory |
+| RecipeUpdated | Menu | Inventory, Reporting |
+| ModifierRecipeImpactUpdated | Menu | Inventory, Reporting |
 | MenuItemPriceChanged | Menu | Sales (Read Model), Reporting |
 | MenuItemActivated | Menu | Sales, Order Fulfillment, Reporting |
 | MenuItemDeactivated | Menu | Sales, Order Fulfillment, Reporting |
 | CustomerCreated | CRM | Reporting |
-| DiscountEligibilityFlagged | CRM | Sales |
+| DiscountEligibilityFlagged | CRM | Sales, Reporting |
 | EmployeeCreated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
 | EmployeeUpdated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
 | EmployeeActivated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
