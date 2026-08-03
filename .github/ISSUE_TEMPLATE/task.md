@@ -1,3 +1,11 @@
+---
+name: Engineering Task
+about: Verify readiness and traceability before implementation
+title: ''
+labels: ''
+assignees: ''
+---
+
 <!--
 This template operationalizes RFC-005 §3.1 (Definition of Ready).
 It does not define requirements — it verifies that requirements already exist and are unambiguous.
