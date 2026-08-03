@@ -62,11 +62,13 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 - تسجيل طريقة الدفع وحالة السداد (Payment Status) للمعاملة
 - إصدار الفاتورة (Invoice) كتمثيل للمعاملة التجارية
 - إتمام البيع (Sale Completion) ونشر الحدث الناتج
+- الاحتفاظ بـ `MenuItemSalesReadModel` محلي من أحداث Menu، ونسخ `currentBasePrice` إلى `OrderLine.unitPrice` كـ Snapshot ثابت وقت إنشاء Order
 
 **Out of Scope:**
 - **لا تملك Payments كنظام مستقل متعدد الوسائل (Gateways)** — Sales تُسجّل "طريقة الدفع وحالتها" فقط كخاصية على المعاملة؛ أي تكامل مستقبلي مع بوابات دفع فعلية (Payment Gateway Integration) هو مسؤولية Domain منفصل مستقبلي (Payments)، وليس جزءًا من Sales.
 - لا تملك المخزون أو منطق خصمه (هذا لـ Inventory).
 - لا تملك تعريف المنتجات أو أسعارها الأساسية (هذا لـ Menu).
+- لا تملك جداول الأسعار المستقبلية أو تاريخ نسخ الأسعار؛ تحتفظ فقط بالسعر الحالي اللازم للبيع، ولا تعيد تسعير Order قائم بعد تغيّر سعر Menu.
 - لا تملك بيانات العميل أو نقاط الولاء (هذا لـ CRM).
 - **لا تملك تتبع تنفيذ الطلب** (Preparing / Ready / Served / Cancelled / Rejected) — هذا حصريًا مسؤولية **Order Fulfillment** (القسم 4.2). Sales مسؤوليتها تنتهي عند إنشاء الطلب ونشر حدث `OrderPlaced`، وتُستأنف فقط عند إتمام المعاملة ماليًا.
 
@@ -106,7 +108,7 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 - قفل الشيفت (Shift Close) مع تسجيل المبلغ الفعلي في الدرج، ومقارنته بالمتوقع (بناءً على مبيعات الشيفت)
 - حساب الفرق النقدي (Cash Difference) عند القفل
 - إصدار ملخص نهاية الشيفت (End-of-Shift Summary)
-- **الاحتفاظ بعدّاد محلي للطلبات المفتوحة** (`OrderPlaced` لم يُغلَق بعد بـ `SaleCompleted`/`OrderCancelled`/`OrderRejected`) لمنع قفل شيفت عليه طلبات معلَّقة (اكتُشف كـ Gap في System Freeze v1 Deep Validation)
+- **الاحتفاظ بعدّاد محلي للطلبات المفتوحة حسب `OrderPlaced.shiftId` الإلزامي** (`OrderPlaced` لم يُغلَق بعد بـ `SaleCompleted`/`OrderCancelled`/`OrderRejected`) لمنع قفل شيفت عليه طلبات معلَّقة. لا يُستنتج الشيفت من `createdByEmployeeId?`
 
 **Out of Scope:**
 - لا تملك تفاصيل المبيعات نفسها أو حسابها (هذا لـ Sales) — تستهلك فقط ملخصًا إجماليًا من Sales لمقارنته بالنقدية الفعلية.
@@ -131,13 +133,15 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 - إدارة القائمة (Menu) والفئات (Categories)
 - إدارة المنتجات النهائية القابلة للبيع (Menu Items / Products)
 - إدارة الوصفات (Recipes / BOM) وربطها بالمكونات (Ingredients)
-- إدارة الأسعار الأساسية للمنتجات
+- إدارة السعر الأساسي الحالي وكل الأسعار المجدولة وتواريخ نفاذها
 
 **Out of Scope:**
 - لا تملك كميات المخزون الفعلية أو حركاته (هذا لـ Inventory).
 - لا تملك منطق البيع أو الخصومات التطبيقية وقت البيع (هذا لـ Sales).
 
 **Owned Concepts:** MenuItem, Category, Recipe, RecipeIngredientLink (إشارة فقط لـ `stockItemId` وكمية مطلوبة — وليس تعريف المكوّن نفسه), BasePrice
+
+> **ملكية السعر:** الأسعار المجدولة تظل داخل Menu حتى لحظة نفاذها. عند النفاذ ينشر Menu حدث `MenuItemPriceChanged` بصورة idempotent؛ Sales يحتفظ بالسعر الحالي فقط ويأخذ منه Snapshot ثابت عند `OrderPlaced`. لا يؤثر أي تغيير لاحق على Orders قائمة.
 
 > **تصحيح معماري (بعد تعريف فلسفة Inventory Engine):** القرار السابق القائل بأن "Ingredient كسجل أساسي يُدار عبر Menu" **أصبح لاغيًا**. Menu **لا يملك أي تعريف** للمكوّن (لا اسمه، لا وحدة قياسه، لا حد إعادة طلبه) — كل هذا ينتقل بالكامل لـ **Inventory** كمالك حصري لـ `StockItem` (راجع القسم 4.5 المُحدَّث). Menu.Recipe تكتفي بالإشارة إلى `stockItemId` ككائن خارجي مُعرَّف مسبقًا في Inventory، تمامًا كما تشير Sales إلى `menuItemId` دون امتلاكه.
 
@@ -167,7 +171,7 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 
 > **قرارات حاسمة مُعتمَدة لفلسفة Inventory Engine:**
 > 1. **طريقة التقييم:** Weighted Average Cost في MVP؛ FIFO/Batch Tracking مؤجَّلة لـ Phase 2.
-> 2. **الرصيد السالب (Negative Stock):** سياسة قابلة للتهيئة على مستوى كل Tenant (`NegativeStockPolicy`): `Strict` (منع البيع) / `Warning` (السماح + تنبيه — الافتراضي) / `Ignore` (السماح بدون تنبيه). القيمة تُدار عبر Settings (Platform Domain) ويستهلكها Inventory وقت اتخاذ القرار.
+> 2. **الرصيد السالب (Negative Stock):** سياسة قابلة للتهيئة على مستوى كل Tenant (`NegativeStockPolicy`): `Strict` (منع البيع) / `Warning` (السماح + تنبيه — الافتراضي) / `Ignore` (السماح بدون تنبيه). القيمة تُدار عبر Settings (Platform Domain) وتصل إلى Sales وInventory عبر ports محايدة وفق RFC-004 SA-ADR-06، دون أي استيراد مباشر من Platform.
 > 3. **Recipe Snapshot Immutability:** أي `StockMovement` ناتج عن بيع يُخزِّن **الكميات الفعلية المُستهلَكة كأرقام ثابتة** (وليس مرجعًا حيًا لوصفة قابلة للتغيير)، مع الاحتفاظ بمرجع لنسخة الوصفة المُستخدَمة (`recipeVersionUsed`) لأغراض التدقيق فقط. تعديل وصفة لاحقًا (`RecipeUpdated`) **لا يغيّر أبدًا** حركات مخزون سابقة بأثر رجعي.
 
 ---
@@ -373,7 +377,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 | هل خصم المخزون الناتج عن البيع مرئي خارج Inventory؟ | **كان غير مرئي إطلاقًا حتى اكتشاف الفجوة أثناء تصميم Reporting.** الآن: `InventoryMovementRecorded` يُنشَر لكل حركة (بيع، استلام، تسوية، هدر، جرد) بالتقييم المالي الكامل — مسار Reporting الوحيد لحساب Food Cost وInventory Valuation. |
 | مين بيسجّل مين نفّذ عملية البيع أو التحضير؟ | حقول اختيارية جديدة: `createdByEmployeeId` (OrderPlaced)، `completedByEmployeeId` (SaleCompleted)، `preparedByEmployeeId` (OrderReady)، `servedByEmployeeId` (OrderServed) — لأغراض Reporting فقط (Top Cashiers/Baristas)، ليست شرطًا مسبقًا لأي حدث. |
 | هل Order وSale نفس الكيان؟ | **لا.** كيانان منفصلان داخل Sales، مرتبطان بمرجع `orderId` صريح — يسمح مستقبلًا بـ Split Payments، Table Transfer، Merge Orders (اكتُشف عبر End-to-End Walkthrough). |
-| هل يمكن إنشاء Order بدون شيفت مفتوح؟ | لا. نفس شرط `SaleCompleted` يُطبَّق على `OrderPlaced` من اللحظة الأولى (اكتُشف عبر End-to-End Walkthrough). |
+| هل يمكن إنشاء Order بدون شيفت مفتوح؟ | لا. يحمل Order و`OrderPlaced` قيمة `shiftId` إلزامية من اللحظة الأولى. يستخدم Shift Management هذه القيمة نفسها في Open Orders Counter؛ لا يجوز استنتاج الشيفت من `createdByEmployeeId?`. |
+| من يملك سعر Menu وكيف تستخدمه Sales؟ | Menu يملك السعر الحالي والمجدول. Sales يحتفظ فقط بـ `MenuItemSalesReadModel.currentBasePrice` من أحداث التفعيل/تغيير السعر/التعطيل، وينسخه إلى `OrderLine.unitPrice` Snapshot ثابت وقت إنشاء Order؛ لا إعادة تسعير لاحقة. |
 | مين بيتحقق من صحة `stockItemId`؟ | Menu وPurchasing كلاهما يحتفظان بـ Read Model محلي من `StockItemCreated`/`StockItemDeactivated` (نفس نمط التحقق من الموردين) — كان Gap مكتشَف عبر Walkthrough، تم سده. |
 | ماذا يحدث لأوامر شراء مفتوحة عند تعطيل مورد؟ | **تبقى سارية بالكامل** — يمكن استلام بضاعة ضدها بشكل طبيعي؛ التعطيل يمنع فقط أوامر شراء **جديدة** (System Freeze v1 Finding #1). |
 | كيف تُحدَّد إعادة المخزون عند Refund؟ | **ليست سياسة عامة على مستوى الفرع** — قرار لكل بند مرتجع على حدة عبر `disposition` Enum (`Restock`/`Discard`/`InspectionRequired`) يُحدَّد وقت تسجيل المرتجع (System Freeze v1 Finding #2). |
@@ -395,6 +400,7 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 Shift Management  --ShiftOpened-->             Sales (Read Model), Reporting
 Shift Management  --ShiftClosed-->              Sales (Read Model), Reporting, Notifications
 Sales             --OrderPlaced-->              Order Fulfillment, Shift Management (عدّاد)
+Menu              --MenuItemActivated/PriceChanged/Deactivated--> Sales (MenuItemSalesReadModel), Reporting
 Order Fulfillment --OrderReady-->               Notifications, Reporting
 Order Fulfillment --OrderServed-->              Sales (لإغلاق/إتمام المعاملة), Reporting
 Order Fulfillment --OrderCancelled/Rejected-->  Sales, Notifications, Reporting, Shift Management (عدّاد)
