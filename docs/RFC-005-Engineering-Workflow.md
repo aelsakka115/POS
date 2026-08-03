@@ -2,7 +2,7 @@
 
 **Type:** RFC (Engineering Governance — Phase 2)
 **Depends on:** Product Bible v1، RFC-001 → RFC-004
-**Status:** Proposed → Pending Review
+**Status:** **Approved — governance changes require RFC-005 Change Management**
 **Audience:** Claude Code، Lovable، GitHub Copilot، Lead Architect، وأي مطوّر بشري مستقبلي
 
 ---

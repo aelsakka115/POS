@@ -322,7 +322,9 @@ Reason:
 
 ✅ **متوافق مع Product Bible ADR-11** (Module Activation) — هذا الـ RFC يُفصِّل المبدأ لطبقتين بدل طبقة واحدة، لا يتعارض معه.
 
-✅ **لا تعارض مع RFC-001/002** — لم يُضَف أي Domain أو Event جديد؛ الـ Capabilities كلها مبنية على Responsibilities وPermissions الموثَّقة بالفعل في كل Domain Document.
+✅ **لا تعارض مع RFC-001/002** — يحتوي RFC-002 على 48 Event contracts ولم يُضَف أي Domain أو Event جديد في Issue #2؛ الـ Capabilities كلها مبنية على Responsibilities وPermissions الموثَّقة بالفعل في كل Domain Document.
+
+✅ **لا تغيير في Capability IDs** — `SALES.POS` وباقي السجل كما هي. `NegativeStockPolicy` إعداد Tenant وليس Capability ولا يُقرأ عبر `ICapabilityGuard`.
 
 ✅ **متوافق مع مبدأ "No Direct Cross-Domain Calls"** — فحص الـ Capability هو استعلام محلي (عادة من Core Platform Settings)، وليس استدعاءً لدومين آخر.
 

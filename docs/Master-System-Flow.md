@@ -3,7 +3,7 @@
 **Type:** Consolidation Reference (ليست RFC وليست Domain Document)
 **Purpose:** مرجع معماري واحد يشرح كيف يعمل Cafe Engine من طرف لطرف، بتجميع ما هو موثَّق بالفعل فقط
 **Sources:** Product Bible v1، RFC-001، RFC-002، System Freeze v1، كل Domain Documents المعتمدة
-**Status:** لا يُضيف أي قرار أو قاعدة جديدة — أي تعارض اكتُشف أثناء الإعداد مذكور صراحة في القسم 7 (Validation)، وليس مُصلَحًا هنا
+**Status:** **Consolidation Reference — Approved source documents remain authoritative; changes require their RFC-005 process**
 
 ---
 
@@ -49,7 +49,7 @@
 [5] Shift Management: ShiftOpened
         │  (شرط مسبق إلزامي لكل ما يلي)
         ▼
-[6] Sales: OrderPlaced
+[6] Sales: OrderPlaced (shiftId إلزامي + unitPrice: Money Snapshot من MenuItemSalesReadModel)
         │  (يتحقق من: شيفت مفتوح + Availability عند Strict)
         │
         ├──▶ Order Fulfillment: يُنشئ FulfillmentOrder، يوجّه للمحطات عبر PreparationInfo
@@ -89,7 +89,7 @@
 
 | Domain | Owns (Owned Concepts) | Consumes Events | Publishes Events | Read Models يحتفظ بها |
 |--------|------------------------|-------------------|---------------------|--------------------------|
-| **Sales** | Order, OrderLine, Sale, Invoice, Discount, PaymentStatus | OrderServed, OrderCancelled, OrderRejected, ShiftOpened, ShiftClosed, ItemAvailabilityChanged, DiscountEligibilityFlagged | OrderPlaced, SaleCompleted, SaleRefunded, DiscountApplied | Shift Status RM، Item Availability RM |
+| **Sales** | Order, OrderLine, Sale, Invoice, Discount, PaymentStatus | OrderServed, OrderCancelled, OrderRejected, ShiftOpened, ShiftClosed, ItemAvailabilityChanged, MenuItemActivated, MenuItemPriceChanged, MenuItemDeactivated, DiscountEligibilityFlagged | OrderPlaced, SaleCompleted, SaleRefunded, DiscountApplied | Shift Status RM، Item Availability RM، MenuItemSalesReadModel |
 | **Order Fulfillment** | FulfillmentOrder, FulfillmentOrderLine, StationAssignment, OrderStatus | OrderPlaced, MenuItemActivated, MenuItemDeactivated, ItemAvailabilityChanged (استشاري) | OrderReady, OrderServed, OrderCancelled, OrderRejected | Menu Items + PreparationInfo RM |
 | **Shift Management** | ShiftSession, CashDrawerOpening/Closing, CashDifference, EndOfShiftSummary, OpenOrdersCounter | OrderPlaced, SaleCompleted, OrderCancelled, OrderRejected | ShiftOpened, ShiftClosed | Open Orders Counter (داخلي) |
 | **Menu** | MenuItem, Category, Recipe, RecipeIngredientLink, ModifierGroup, Modifier, ModifierRecipeImpact, PreparationInfo, BasePrice | StockItemCreated, StockItemDeactivated | MenuItemActivated, MenuItemDeactivated, MenuItemPriceChanged, RecipeUpdated, ModifierRecipeImpactUpdated | Stock Items RM (للتحقق المرجعي) |
@@ -113,6 +113,7 @@
 |------------|-----------|------------------|-----------|
 | **Shift Status Read Model** | Sales | `ShiftOpened`, `ShiftClosed` | بوابة تحقق لـ `OrderPlaced` و`SaleCompleted` (Domain-Sales.md Business Rules #12, #13) |
 | **Item Availability Read Model** | Sales | `ItemAvailabilityChanged` | بوابة تحقق لـ `OrderPlaced` عند `NegativeStockPolicy=Strict` فقط (Domain-Sales.md Business Rule #15) |
+| **MenuItemSalesReadModel** | Sales | `MenuItemActivated`, `MenuItemPriceChanged`, `MenuItemDeactivated` | يحتفظ فقط بـ `tenantId`, `menuItemId`, `isActive`, `currentBasePrice: Money`, `priceEffectiveFrom`, `lastChangedAt` لإنشاء Order؛ بلا price history/future schedules/Inventory/Preparation/Modifier pricing |
 | **Menu Items + PreparationInfo Read Model** | Order Fulfillment | `MenuItemActivated`, `MenuItemDeactivated` | توجيه البنود للمحطات الصحيحة (Domain-Order-Fulfillment.md §9) |
 | **Open Orders Counter** | Shift Management | `OrderPlaced`, `SaleCompleted`, `OrderCancelled`, `OrderRejected` | منع `ShiftClosed` طالما العدّاد > صفر (RFC-001 §4.3) |
 | **Stock Items Read Model** | Menu | `StockItemCreated`, `StockItemDeactivated` | التحقق المرجعي قبل بناء أي Recipe أو ModifierRecipeImpact (Domain-Menu.md §9) |
@@ -129,22 +130,25 @@
 
 ## 5. Event Flow Overview (مُجمَّع)
 
-هذا تجميع مباشر لخريطة الأحداث الكاملة كما وردت في RFC-001 §6 وRFC-002 §15، بدون أي إضافة:
+هذا تجميع مباشر لخريطة الأحداث الكاملة كما وردت في RFC-001 §6 وRFC-002 §16، بدون أي إضافة:
 
 ```
 Suppliers & Business Accounts → SupplierCreated/SupplierDeactivated → Purchasing (RM), Reporting
 Purchasing        → PurchaseOrderCreated/Cancelled     → Reporting
 Purchasing        → GoodsReceived                       → Inventory, Reporting, Suppliers & Business Accounts (اختياري)
-Suppliers & Business Accounts → PurchaseInvoiceRecorded/PaymentRecorded/SupplierPaymentOverdue → Reporting, Notifications
+Suppliers & Business Accounts → PurchaseInvoiceRecorded/PaymentRecorded → Reporting
+Suppliers & Business Accounts → SupplierPaymentOverdue → Notifications, Reporting
 
 Inventory         → StockItemCreated/Deactivated         → Menu (RM), Purchasing (RM), Reporting
 Staff             → EmployeeCreated/Updated/Activated/Deactivated/Transferred/Terminated → Attendance (RM), Payroll (RM), Expenses (RM), Reporting
-Menu              → RecipeUpdated/ModifierRecipeImpactUpdated → Inventory
-Menu              → MenuItemActivated/Deactivated/PriceChanged → Sales, Order Fulfillment, Reporting
+Menu              → RecipeUpdated/ModifierRecipeImpactUpdated → Inventory, Reporting
+Menu              → MenuItemActivated/MenuItemDeactivated → Sales, Order Fulfillment, Reporting
+Menu              → MenuItemPriceChanged               → Sales, Reporting
 
-Shift Management  → ShiftOpened/ShiftClosed              → Sales (RM), Reporting, Notifications
+Shift Management  → ShiftOpened                          → Sales (RM), Reporting
+Shift Management  → ShiftClosed                          → Sales (RM), Reporting, Notifications
 
-Sales             → OrderPlaced                          → Order Fulfillment, Shift Management (عدّاد)
+Sales             → OrderPlaced                          → Order Fulfillment, Shift Management (عدّاد), Reporting
 Order Fulfillment → OrderReady                            → Notifications, Reporting
 Order Fulfillment → OrderServed                            → Sales, Reporting
 Order Fulfillment → OrderCancelled/OrderRejected           → Sales, Notifications, Reporting, Shift Management (عدّاد)
@@ -158,7 +162,7 @@ Inventory         → ItemAvailabilityChanged                 → Sales (RM), Or
 Inventory         → InventoryMovementRecorded                → Reporting
 
 CRM               → CustomerCreated                          → Reporting
-CRM               → DiscountEligibilityFlagged                → Sales
+CRM               → DiscountEligibilityFlagged                → Sales, Reporting
 
 Attendance        → WorkingHoursCalculated                   → Reporting, Payroll
 Attendance        → AttendanceExceptionRaised                → Notifications, Reporting, Payroll
@@ -183,13 +187,13 @@ Payroll           → PayrollRunCompleted                          → Reporting
 | **Event-Driven بين الدومينز، Direct Calls داخل نفس الـ Bounded Context** | Product Bible ADR-04، Domain-Sales.md | لا استثناء واحد حتى الآن عبر 7 دومينز مكتملة |
 | **Domain Ownership الصارم** | RFC-001 (كل دومين) | كل مفهوم له مالك واحد فقط؛ أي إشارة خارجية = مرجع (ID) وليس ملكية |
 | **Single Source of Truth لكل مفهوم** | RFC-001، System Freeze v1 §4 | مثال: StockItem (Inventory فقط)، Supplier (Suppliers & Business Accounts فقط) |
-| **Read Models كنمط موحَّد للمعرفة عبر الدومينز** | System Freeze v1 §4، القسم 4 أعلاه | 8 Read Models موثَّقة، كلها بنفس النمط (Eventually Consistent، مبنية من أحداث) |
+| **Read Models كنمط موحَّد للمعرفة عبر الدومينز** | System Freeze v1 §4، القسم 4 أعلاه | 12 Read Models موثَّقة، كلها بنفس النمط (Eventually Consistent، مبنية من أحداث) |
 | **Immutable Business Events / Financial Immutability** | Domain-Sales.md، Domain-Inventory.md | Sale مكتملة لا تُلغى بأثر رجعي؛ StockMovement الناتج عن بيع يحمل كميات ثابتة (Recipe Snapshot) |
 | **AI-Ready but AI-Independent** | Product Bible ADR-10 | لا Vector DB ولا Embeddings في MVP؛ فقط بيانات نظيفة + أحداث مُهيَّأة لاستخدام مستقبلي |
 | **No Direct Cross-Domain Calls** | Product Bible، صمد حتى في أصعب اختبار (Strict Policy — System Freeze v1 Finding #3) | حُلَّت كل الحالات الصعبة بـ Read Models بدل كسر القاعدة |
 | **Modular Monolith First** | Product Bible ADR-03 | لا Microservices حتى الآن؛ كل الدومينز داخل نفس الوحدة التشغيلية |
 | **Eventual Consistency كـ Trade-off موثَّق وليس ثغرة مخفية** | RFC-002 §6.6، System Freeze v1 §4 | صراحة في كل مكان يُستخدَم فيه (خصوصًا Item Availability RM) |
-| **Per-Tenant Ordered Delivery** | RFC-002 §16 Rule 8 | أساس كل قواعد الـ Immutability والـ Read Models المحلية |
+| **Per-Tenant Ordered Delivery** | RFC-002 §17 Rule 8 | أساس كل قواعد الـ Immutability والـ Read Models المحلية |
 | **Two-Layer Defense كنمط لقرارات حرجة** | Domain-Inventory.md Business Rule #4 | Sales (وقائي، Eventually Consistent) + Inventory (Backstop نهائي) — نفس النمط قابل لإعادة الاستخدام مستقبلًا لقرارات مشابهة |
 
 ---
@@ -198,9 +202,11 @@ Payroll           → PayrollRunCompleted                          → Reporting
 
 راجعت كل تفاعل مذكور أعلاه مقابل RFC-001 وRFC-002 مباشرة (وليس من الذاكرة). النتيجة:
 
-✅ **كل الأحداث الـ 35 في RFC-002 مُمثَّلة بدقة** في القسم 5 (Event Flow Overview)، بنفس أسماء الناشر والمستمعين حرفيًا من مصفوفة الاشتراكات §15.
+✅ **كل الأحداث الـ 48 في RFC-002 مُمثَّلة بدقة** في القسم 5 (Event Flow Overview)، بنفس أسماء الناشر والمستمعين من مصفوفة الاشتراكات §16 (وتُجمَّع الأحداث ذات المسار الواحد في سطر واحد للاختصار).
 
-✅ **كل الـ Read Models الثمانية** المذكورة صراحة في Domain Documents مُجمَّعة في القسم 4 دون إضافة أو حذف.
+✅ **كل الـ Read Models الاثني عشر** المذكورة صراحة في Domain Documents مُجمَّعة في القسم 4 دون إضافة أو حذف.
+
+✅ **سجلات القرار متسقة:** Product Bible يحتوي 36 Business ADRs (بما فيها ADR-36)، وRFC-004 يحتوي 6 SA-ADRs (بما فيها SA-ADR-06).
 
 ✅ **لا تعارض بين RFC-001 وRFC-002** في أي نقطة تم فحصها.
 

@@ -1,6 +1,6 @@
 # RFC-002: Cafe Engine — Event Catalog
 
-**Status:** Draft v1 (مبني على RFC-001 Approved/Frozen)
+**Status:** **Approved — Event Contract changes require RFC-005 Change Management**
 **Type:** RFC (Architecture — Stable Reference Document)
 **Depends on:** RFC-001 (Cafe Engine Context Map)
 
@@ -58,11 +58,11 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Sales |
-| **Subscribers** | Order Fulfillment, Shift Management (عدّاد الطلبات المفتوحة) |
+| **Subscribers** | Order Fulfillment, Shift Management (عدّاد الطلبات المفتوحة), Reporting |
 | **Trigger** | العميل/الكاشير يُنشئ طلبًا جديدًا ببنوده (Order Lines) ويُرسله للتنفيذ |
-| **Payload (High-Level)** | `orderId, tenantId, branchId, createdByEmployeeId?, orderLines[{menuItemId, quantity, selectedModifierIds[], notes}], createdAt` |
+| **Payload (High-Level)** | `eventName: "OrderPlaced", tenantId, orderId, branchId, shiftId, createdByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice: Money, selectedModifierIds[], notes?}], createdAt` |
 | **Business Meaning** | "هذا الطلب مُعتمَد للبيع ويحتاج تنفيذًا فعليًا في المطبخ/محطة العمل" |
-| **Business Preconditions** | Order يحتوي على بند واحد على الأقل; كل `menuItemId` في البنود موجود وفعّال في Menu; الطلب لم يُنشر مسبقًا (لا تكرار لنفس Order); **يوجد شيفت مفتوح فعليًا للفرع/الكاشير وقت إنشاء الطلب** |
+| **Business Preconditions** | Order يحتوي على `OrderLine` صالح واحد على الأقل؛ كل كمية موجبة، وكل `menuItemId` فعّال في `MenuItemSalesReadModel` وله `currentBasePrice` موجب صالح يُنسخ إلى `unitPrice`; كل البنود تستخدم عملة واحدة; الطلب لم يُنشر مسبقًا; **`shiftId` إلزامي ويشير لشيفت مفتوح**. `createdByEmployeeId?` اختياري ولا يُستخدم لاستنتاج الشيفت |
 | **Idempotency** | نعم — `orderId` فريد؛ استهلاك مكرر لنفس `orderId` يجب أن يُتجاهَل من قِبل Order Fulfillment (Idempotent Consumer) |
 | **Classification** | Internal Domain Event |
 
@@ -73,7 +73,7 @@
 | **Publisher** | Sales |
 | **Subscribers** | Inventory, CRM, Reporting, Notifications, Shift Management (عدّاد الطلبات المفتوحة) |
 | **Trigger** | إتمام عملية البيع ماليًا (الدفع + تأكيد المعاملة) |
-| **Payload (High-Level)** | `saleId, orderId, tenantId, branchId, shiftId, customerId?, completedByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice, selectedModifierIds[]}], discountApplied?, totalAmount, paymentStatus, paymentMethod, completedAt` |
+| **Payload (High-Level)** | `saleId, orderId, tenantId, branchId, shiftId, customerId?, completedByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice: Money, selectedModifierIds[]}], discountApplied?, totalAmount: Money, paymentStatus, paymentMethod, completedAt` |
 | **Business Meaning** | "معاملة بيع مكتملة ماليًا ومُعتمَدة كمصدر حقيقة للإيراد، ومرتبطة إلزاميًا بجلسة شيفت مفتوحة وبالطلب التشغيلي الأصلي (`orderId`) الذي نشأت منه" |
 | **Business Preconditions** | Payment Approved (تم تأكيد السداد أو اعتماد طريقة الدفع); Sale موجودة وصالحة (لم تُلغَ قبل الإتمام); لم تُصنَّف هذه المعاملة كـ Refunded مسبقًا; إجمالي المبلغ يطابق مجموع البنود بعد الخصم (إن وُجد); يوجد شيفت (`shiftId`) مفتوح فعليًا للفرع/الكاشير وقت إتمام المعاملة; **يوجد `orderId` صالح ومرجعي لطلب سابق (`OrderPlaced`)** |
 | **Idempotency** | نعم — إلزامية، لأن Inventory سيخصم مخزونًا بناءً عليه؛ معالجة مكررة = خصم مضاعف خاطئ. يجب استخدام `saleId` كمفتاح Idempotency لدى كل مستهلك |
@@ -153,7 +153,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Order Fulfillment |
-| **Subscribers** | Sales, Notifications, Shift Management (عدّاد الطلبات المفتوحة) |
+| **Subscribers** | Sales, Notifications, Reporting, Shift Management (عدّاد الطلبات المفتوحة) |
 | **Trigger** | رفض محطة العمل تنفيذ الطلب (مثال: نفاد مكوّن أساسي مكتشف وقت التحضير) |
 | **Payload (High-Level)** | `orderId, tenantId, branchId, rejectedReason, rejectedAt` |
 | **Business Meaning** | "تعذّر تنفيذ الطلب تشغيليًا رغم قبوله ماليًا من Sales — يحتاج تدخلًا فوريًا" |
@@ -381,7 +381,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Menu |
-| **Subscribers** | Inventory |
+| **Subscribers** | Inventory, Reporting |
 | **Trigger** | تعديل مكونات/كميات وصفة منتج قائم |
 | **Payload (High-Level)** | `recipeId, recipeVersion, menuItemId, tenantId, ingredients[{stockItemId, quantityRequired}], updatedAt` |
 | **Business Meaning** | "تغيّرت متطلبات الإنتاج لهذا الصنف؛ عمليات الخصم المستقبلية عند البيع يجب أن تستخدم النسخة الجديدة. **لا تؤثر بأي شكل على حركات مخزون سابقة** — تلك تحتفظ بالكميات الفعلية كأرقام ثابتة (Immutable Snapshot) بغض النظر عن أي تعديل لاحق" |
@@ -394,12 +394,12 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Menu |
-| **Subscribers** | Reporting |
-| **Trigger** | تغيير السعر الأساسي لمنتج في القائمة |
-| **Payload (High-Level)** | `menuItemId, tenantId, oldPrice, newPrice, effectiveFrom` |
-| **Business Meaning** | "تسعير جديد نافذ اعتبارًا من تاريخ محدد؛ مهم لتفسير التقارير التاريخية بشكل صحيح" |
-| **Business Preconditions** | المنتج (`menuItemId`) موجود وفعّال; `newPrice` قيمة موجبة صالحة; `effectiveFrom` تاريخ مستقبلي أو حالي، وليس تاريخًا ماضيًا |
-| **Idempotency** | غير حرج — تحديث توصيفي غير تراكمي |
+| **Subscribers** | Sales (Read Model), Reporting |
+| **Trigger** | وصول تغيير مجدول للسعر الأساسي إلى وقت نفاذه |
+| **Payload (High-Level)** | `eventName: "MenuItemPriceChanged", tenantId, priceChangeId, menuItemId, oldPrice: Money, newPrice: Money, effectiveFrom, changedAt` |
+| **Business Meaning** | "أصبح هذا السعر هو السعر الحالي النافذ؛ تحدّث Sales نسختها الحالية فقط، ولا تُعاد تسعير Orders قائمة" |
+| **Business Preconditions** | عند **جدولة** التغيير أصلًا: المنتج (`menuItemId`) موجود وفعّال، و`newPrice` قيمة موجبة صالحة، و`effectiveFrom` ليس في الماضي وقت الجدولة. عند **نشر** الحدث: أصبح السعر نافذًا (`effectiveFrom <= changedAt`)؛ النشر المتأخر أو إعادة المحاولة مسموحان ويظلان idempotent عبر `priceChangeId` |
+| **Idempotency** | نعم — `priceChangeId` هو مفتاح الـ Idempotency؛ يُنشر الحدث idempotently مرة نفاذ التغيير المجدول |
 | **Classification** | Internal Domain Event |
 
 ### 9.3 `MenuItemActivated`
@@ -409,7 +409,7 @@
 | **Publisher** | Menu |
 | **Subscribers** | Sales, Order Fulfillment, Reporting |
 | **Trigger** | تفعيل منتج جديد أو إعادة تفعيل منتج مُعطَّل مسبقًا، فيصبح متاحًا للبيع |
-| **Payload (High-Level)** | `menuItemId, tenantId, categoryId, activatedAt` |
+| **Payload (High-Level)** | `eventName: "MenuItemActivated", tenantId, menuItemId, categoryId, basePrice: Money, priceEffectiveFrom, activatedAt` |
 | **Business Meaning** | "هذا المنتج أصبح قابلًا للإضافة لأي طلب بيع جديد" |
 | **Business Preconditions** | المنتج يملك وصفة (Recipe) مُعرَّفة إن كان منتجًا يحتاج تحضيرًا; المنتج يملك سعرًا أساسيًا صالحًا; المنتج مرتبط بفئة (Category) موجودة |
 | **Idempotency** | نعم — `menuItemId` كمفتاح؛ تفعيل مكرر لمنتج مُفعَّل بالفعل يُتجاهَل |
@@ -433,7 +433,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | Menu |
-| **Subscribers** | Inventory |
+| **Subscribers** | Inventory, Reporting |
 | **Trigger** | تعريف أو تعديل تأثير Modifier معيّن على الوصفة (استبدال مكوّن أو إضافة كمية) |
 | **Payload (High-Level)** | `modifierId, tenantId, impactType (substitute/addition), targetStockItemId, substituteStockItemId?, quantityDelta, updatedAt` |
 | **Business Meaning** | "اختيار هذا الـ Modifier وقت البيع يجب أن يُغيّر فعليًا استهلاك المخزون المتوقع لهذا المنتج" |
@@ -463,7 +463,7 @@
 | الحقل | التفاصيل |
 |-------|----------|
 | **Publisher** | CRM |
-| **Subscribers** | Sales |
+| **Subscribers** | Sales, Reporting |
 | **Trigger** | استيفاء العميل لشرط أهلية خصم (بناءً على قواعد CRM — تاريخ شراء، ولاء...) |
 | **Payload (High-Level)** | `customerId, tenantId, eligibleDiscountType, eligibleValue, validUntil?, reason` |
 | **Business Meaning** | **اقتراح فقط، وليس قرارًا** — "هذا العميل مؤهَّل لخصم كذا، والقرار النهائي بالتطبيق أو الرفض يعود حصريًا لـ Sales" |
@@ -711,14 +711,14 @@
 |-------|--------|-----------|
 | ShiftOpened | Shift Management | Sales (Read Model), Reporting |
 | ShiftClosed | Shift Management | Sales (Read Model), Reporting, Notifications |
-| OrderPlaced | Sales | Order Fulfillment, Shift Management |
+| OrderPlaced | Sales | Order Fulfillment, Shift Management, Reporting |
 | SaleCompleted | Sales | Inventory, CRM, Reporting, Notifications, Shift Management |
 | SaleRefunded | Sales | Inventory, CRM, Reporting, Notifications |
 | DiscountApplied | Sales | Reporting, CRM |
 | OrderReady | Order Fulfillment | Notifications, Reporting |
 | OrderServed | Order Fulfillment | Sales, Reporting |
 | OrderCancelled | Order Fulfillment | Sales, Notifications, Reporting, Shift Management |
-| OrderRejected | Order Fulfillment | Sales, Notifications, Shift Management |
+| OrderRejected | Order Fulfillment | Sales, Notifications, Reporting, Shift Management |
 | StockLevelLow | Inventory | Notifications, Reporting |
 | StockCountFinalized | Inventory | Reporting |
 | StockAdjusted | Inventory | Reporting |
@@ -734,13 +734,13 @@
 | PurchaseInvoiceRecorded | Suppliers & Business Accounts | Reporting |
 | PaymentRecorded | Suppliers & Business Accounts | Reporting |
 | SupplierPaymentOverdue | Suppliers & Business Accounts | Notifications, Reporting |
-| RecipeUpdated | Menu | Inventory |
-| ModifierRecipeImpactUpdated | Menu | Inventory |
-| MenuItemPriceChanged | Menu | Reporting |
+| RecipeUpdated | Menu | Inventory, Reporting |
+| ModifierRecipeImpactUpdated | Menu | Inventory, Reporting |
+| MenuItemPriceChanged | Menu | Sales (Read Model), Reporting |
 | MenuItemActivated | Menu | Sales, Order Fulfillment, Reporting |
 | MenuItemDeactivated | Menu | Sales, Order Fulfillment, Reporting |
 | CustomerCreated | CRM | Reporting |
-| DiscountEligibilityFlagged | CRM | Sales |
+| DiscountEligibilityFlagged | CRM | Sales, Reporting |
 | EmployeeCreated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
 | EmployeeUpdated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
 | EmployeeActivated | Staff | Attendance (Read Model), Payroll (Read Model), Expenses (Read Model), Reporting |
@@ -768,13 +768,21 @@
 4. **كل الأحداث حاليًا Internal Domain Events.** أي ترقية لـ Public Integration Event مستقبلًا تتطلب RFC منفصل لمراجعة تبعات الأمان وإصدارات الـ Payload (Versioning).
 5. **Audit Logs (Supporting Domain)** يستمع ضمنيًا لكل الأحداث أعلاه دون استثناء لغرض التدقيق، ولم يُذكر صراحة في كل صف تفاديًا للتكرار.
 6. **Recipe/Consumption Immutability:** أي حركة مخزون ناتجة عن استهلاك (بيع) تُخزَّن بكمياتها الفعلية كأرقام ثابتة وقت الحدوث، مع الاحتفاظ بمرجع لنسخة الوصفة المُستخدَمة (`recipeVersionUsed`) لأغراض التدقيق فقط. لا يوجد أي مسار يُعيد حساب استهلاك سابق بناءً على وصفة مُحدَّثة لاحقًا.
-7. **Tenant-Level Policies:** أي سياسة قابلة للتهيئة تؤثر على قرار Domain تشغيلي (مثل `NegativeStockPolicy`) تُدار عبر **Settings** (Platform Domain)، ويستهلكها الـ Domain المعني (Inventory) وقت اتخاذ القرار — وليست جزءًا من منطق العمل المُرمَّز داخل الـ Domain نفسه.
+7. **Tenant-Level Policies:** أي سياسة قابلة للتهيئة تؤثر على قرار Domain تشغيلي (مثل `NegativeStockPolicy`) تُدار عبر **Settings** (Platform Domain)، وتصل للدومين المعني عبر الـports المعتمدة في RFC-004 SA-ADR-06 — وليست جزءًا من منطق العمل المُرمَّز ولا سببًا لاستيراد Platform. يقرأ Create Order السياسة مرة واحدة عند البداية.
 8. **Event Ordering Guarantee:** داخل بنية Modular Monolith الحالية، يضمن الـ Event Bus **تسليم الأحداث بنفس ترتيب نشرها لكل Tenant على حدة** (Per-Tenant Ordered Delivery). هذا الضمان هو الأساس الذي تعتمد عليه كل قواعد الـ Immutability والـ Read Models المحلية (مثل: `RecipeUpdated` يصل دائمًا قبل أي `SaleCompleted` يستخدم تلك النسخة، و`SupplierCreated` يصل قبل أي `PurchaseOrderCreated` يشير له). أي انتقال مستقبلي لبنية موزَّعة (Microservices) **يجب أن يحافظ على هذا الضمان صراحة** (مثال: عبر Partitioning بالـ `tenantId` في طابور الرسائل)، وإلا فكل الـ Business Rules المبنية عليه تحتاج مراجعة كاملة.
 9. **Employee Attribution Fields اختيارية دائمًا:** `createdByEmployeeId` (OrderPlaced)، `completedByEmployeeId` (SaleCompleted)، `preparedByEmployeeId` (OrderReady)، `servedByEmployeeId` (OrderServed) — كلها حقول **اختيارية (Nullable)**، وليست شرطًا مسبقًا (Business Precondition) لأي من هذه الأحداث. كافيه بموظف واحد أو بيئة لا تتطلب إسنادًا فرديًا دقيقًا يمكنها تجاهلها دون كسر أي Business Rule. الغرض الوحيد منها تحليلي (Reporting KPIs مثل Top Cashiers/Baristas)، وليس تشغيليًا.
+10. **Canonical Money:** كل حقل مالي مشار إليه كـ `Money` يستخدم `amountMinor` كـ safe integer و`currencyCode` كرمز ISO-4217 uppercase متحقق منه. تُمنع قيم Floating-Point والعمليات بين عملات مختلفة. قد تكون Money العامة signed حين يسمح المفهوم؛ أما `BasePrice` و`OrderLine.unitPrice` فموجبان حتمًا.
+11. **Shift Binding:** `OrderPlaced.shiftId` إلزامي، ويستخدمه Shift Management مباشرة لتحديث Open Orders Counter. لا يجوز استخدام `createdByEmployeeId?` لاستنتاج الشيفت.
 
 ---
 
 ## 18. Next Steps
+
+### Consistency Summary
+
+- يحتوي الكتالوج على **48 Event contracts** فعلية.
+- تحتوي Full Subscription Matrix (§16) على **48 صفًا**، صف واحد لكل Event contract.
+- تغييرات Issue #2 لا تضيف Event جديدًا؛ تحدّث Payloads وSubscribers للأحداث المعتمدة فقط.
 
 مع اعتماد RFC-002، الحدود والعقود الحدثية أصبحت مستقرة بما يكفي للبدء في:
 

@@ -2,7 +2,7 @@
 
 **Type:** RFC (Software/Implementation Architecture — Phase 2)
 **Depends on:** Product Bible v1، RFC-001، RFC-002، RFC-003، System Freeze v1، Master-System-Flow.md، وكل الـ 12 Domain Document
-**Status:** Proposed → Pending Review (راجع سجل SA-ADR في القسم 14 للقرارات المفتوحة للنقاش)
+**Status:** **Approved — changes require RFC-005 Engineering Decision Process**
 **Audience:** Claude Code، Lovable، GitHub Copilot، وأي AI Agent أو مطوّر بشري يعمل على هذا المشروع مستقبلًا
 
 ---
@@ -83,7 +83,7 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 
 1. أي Domain يكتب تغييرًا في قاعدة البيانات (مثال: `SaleCompleted`) يكتب **في نفس الـ Transaction** سجلًا في جدول `event_outbox` (tenant_id, event_type, payload, created_at, published_at?).
 2. **عملية Dispatcher غير متزامنة** (Asynchronous، آلية التشغيل الفعلية — مجدولة، أو مبنية على طابور، أو غير ذلك — قرار تنفيذي منفصل، راجع القسم 14) تقرأ الأحداث غير المنشورة **بترتيب `created_at` لكل `tenant_id`** وتُوزِّعها على المستمعين.
-3. هذا النمط هو **الضمان المعماري** وراء RFC-002 §16 Rule 8 (Per-Tenant Ordered Delivery) — بدونه، الضمان يبقى نصًا نظريًا فقط. **آلية تشغيل الـ Dispatcher نفسها (الجدولة الزمنية، الاستدعاء عند الحدث، أو غيرها) تفصيل بنية تحتية، وليست قرارًا معماريًا** — راجع القسم 14 (SA-ADR) للفصل الصريح بين الاثنين.
+3. هذا النمط هو **الضمان المعماري** وراء RFC-002 §17 Rule 8 (Per-Tenant Ordered Delivery) — بدونه، الضمان يبقى نصًا نظريًا فقط. **آلية تشغيل الـ Dispatcher نفسها (الجدولة الزمنية، الاستدعاء عند الحدث، أو غيرها) تفصيل بنية تحتية، وليست قرارًا معماريًا** — راجع القسم 14 (SA-ADR) للفصل الصريح بين الاثنين.
 
 > **لماذا Outbox وليس استدعاء مباشر لكل مستمع وقت الكتابة؟** يضمن Atomicity (التغيير + الحدث ينجحان أو يفشلان معًا)، ويمنع فقدان أحداث عند تعطّل مؤقت لأي مستهلك. **هذا الضمان لا يعتمد على أي تقنية تشغيل مُحدَّدة** — Outbox هو العقد المعماري؛ طريقة "تفريغه" فعليًا قرار تنفيذي منفصل يتغيّر بحرية دون المساس بالعقد نفسه.
 
@@ -101,6 +101,21 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 ---
 
 ## 4. Project Structure Blueprint
+
+### 4.1 Canonical Money Contract
+
+العقد المشترك الوحيد للقيم المالية هو:
+
+```text
+Money {
+  amountMinor: safe integer
+  currencyCode: validated ISO-4217 uppercase code
+}
+```
+
+لا تُستخدم Floating-Point للأموال، ولا تُجمع أو تُقارن حسابيًا قيم بعملات مختلفة. يجوز أن تكون Money العامة signed حين يسمح المفهوم التجاري، بينما `BasePrice.amountMinor > 0` و`OrderLine.unitPrice.amountMinor > 0`. يُوثَّق العقد هنا فقط في هذه المهمة، وتنفيذه اللاحق يكون حصريًا داخل `packages/domain-contracts` بمهمة تنفيذ مستقلة.
+
+### 4.2 Monorepo Structure
 
 بنية Monorepo واحدة، تحوي الـ Frontend والـ Backend معًا:
 
@@ -217,6 +232,27 @@ API  →  Application  →  Domain
 ```
 Request → [Auth] → [Tenant Context Resolution] → [Capability Guard] → [Permission Guard] → Application Layer
 ```
+
+### 6.6 Tenant Configuration Dependency Direction
+
+العقد المحايد للدومينز يقع في `apps/backend/shared/application/configuration/ITenantConfigurationPort`. لا يحتوي هذا العقد أي منطق Sales. أما `INegativeStockPolicyProvider` فهو outbound port مملوك لطبقة Sales Application في `apps/backend/sales/application/ports/INegativeStockPolicyProvider`.
+
+```text
+CreateOrderUseCase
+    → Sales Application INegativeStockPolicyProvider
+
+Sales Infrastructure Adapter
+    → implements INegativeStockPolicyProvider
+    → depends on shared ITenantConfigurationPort
+
+Platform Infrastructure
+    → implements shared ITenantConfigurationPort
+
+Composition Root
+    → wiring only
+```
+
+Sales لا يستورد `platform/domain` أو `platform/application` أو `platform/infrastructure`. يقرأ Create Order السياسة مرة واحدة عند البداية، وتستقبل طبقة Sales Domain القيمة المحلولة فقط (`Strict | Warning | Ignore`) دون Promises أو Settings أو Platform أو `ITenantConfigurationPort`. القيمة الافتراضية `Warning`. لا يُنشأ حدث `NegativeStockPolicyChanged` ضمن هذا القرار.
 
 **Capability Guard** يتحقق: هل الـ Capability ID المطلوب (مثال: `PAY.RunPayroll`) مُفعَّل لهذا الـ Tenant؟ لو لا → رفض صريح (RFC-003 §10 Rule 5)، وليس نتيجة فارغة صامتة.
 
@@ -397,18 +433,19 @@ Fowler يربط قرار التنظيف بـ **"روائح الكود" (Code Sme
 
 | # | الالتزام المعماري (ثابت) | الآلية الحالية المُقترَحة (قابلة للتغيير، بنية تحتية) | الحالة |
 |---|---|---|---|
-| **SA-ADR-01** | **Backend Execution Independence:** منطق العمل (الطبقات الأربع، القسم 6) لا يفترض بيئة تشغيل مُحدَّدة — يجب أن يعمل بلا تعديل سواء استُضيف كدوال بلا حالة (Stateless Functions) أو كخدمة دائمة (Persistent Service) | دوال بلا حالة (Serverless) كخطوة أولى — تقلل البنية التحتية المطلوبة، تتماشى مع "سرعة التنفيذ" (Product Bible)؛ الانتقال لخدمة دائمة قرار بنية تحتية بحت لاحقًا لو قيود التنفيذ (مثل حدود زمن التنفيذ) أصبحت مشكلة فعلية | مقترح — يحتاج موافقتك |
-| **SA-ADR-02** | **Guaranteed Ordered Event Delivery عبر Outbox:** أي حدث في RFC-002 يُنشَر عبر Transactional Outbox (القسم 3.2)، لا استدعاء مباشر متزامن بين الدومينز تحت أي ظرف | آلية "تفريغ" الـ Outbox الفعلية (جدولة زمنية، استهلاك طابور، أو غيرها) تُختار لاحقًا بمعزل تام عن هذا الالتزام | مقترح — يحتاج موافقتك |
-| **SA-ADR-03** | **Schema-First Shared Contract:** شكل كل Event وCapability ID يُعرَّف **مرة واحدة** (`packages/domain-contracts`)، ويُشتَق منه كل من التحقق (Validation) في الـ Backend واستنتاج الأنواع (Types) في الـ Frontend — لا تعريف مزدوج لنفس الشكل بأي أداة | REST كأسلوب نقل حاليًا (الأبسط لهذا النمط)؛ اختيار بروتوكول النقل نفسه (REST/GraphQL/RPC) منفصل عن التزام "مصدر واحد للعقد" | مقترح — يحتاج موافقتك |
-| **SA-ADR-04** | **Command/Query Separation دون Event Sourcing كامل:** جهة الكتابة (تفرض Business Rules) منفصلة تمامًا عن جهة القراءة (Read Models/Projections)، لكن **لا** إعادة بناء الحالة بالكامل من الأحداث في كل قراءة — قرار نطاق (Scope)، وليس اختيار أداة | — (هذا القرار نفسه هو الآلية، لا أداة إضافية تحتاجه) | مقترح — يحتاج موافقتك |
-| **SA-ADR-05** | **حدود ملكية حالة السيرفر في الـ Frontend:** نسخة واحدة فقط من أي بيانات قادمة من الـ Backend تُخزَّن في الذاكرة (Single Server-State Cache) — لا تكرار لنفس البيانات في أداتين مختلفتين للحالة | React Query كتطبيق حالي لهذا الالتزام؛ أي حالة UI بحتة (لا تمثِّل بيانات سيرفر) تُدار بأداة منفصلة تمامًا لتجنّب الخلط | مقترح — يحتاج موافقتك |
+| **SA-ADR-01** | **Backend Execution Independence:** منطق العمل (الطبقات الأربع، القسم 6) لا يفترض بيئة تشغيل مُحدَّدة — يجب أن يعمل بلا تعديل سواء استُضيف كدوال بلا حالة (Stateless Functions) أو كخدمة دائمة (Persistent Service) | دوال بلا حالة (Serverless) كخطوة أولى — تقلل البنية التحتية المطلوبة، تتماشى مع "سرعة التنفيذ" (Product Bible)؛ الانتقال لخدمة دائمة قرار بنية تحتية بحت لاحقًا لو قيود التنفيذ (مثل حدود زمن التنفيذ) أصبحت مشكلة فعلية | معتمد |
+| **SA-ADR-02** | **Guaranteed Ordered Event Delivery عبر Outbox:** أي حدث في RFC-002 يُنشَر عبر Transactional Outbox (القسم 3.2)، لا استدعاء مباشر متزامن بين الدومينز تحت أي ظرف | آلية "تفريغ" الـ Outbox الفعلية (جدولة زمنية، استهلاك طابور، أو غيرها) تُختار لاحقًا بمعزل تام عن هذا الالتزام | معتمد |
+| **SA-ADR-03** | **Schema-First Shared Contract:** شكل كل Event وCapability ID يُعرَّف **مرة واحدة** (`packages/domain-contracts`)، ويُشتَق منه كل من التحقق (Validation) في الـ Backend واستنتاج الأنواع (Types) في الـ Frontend — لا تعريف مزدوج لنفس الشكل بأي أداة | REST كأسلوب نقل حاليًا (الأبسط لهذا النمط)؛ اختيار بروتوكول النقل نفسه (REST/GraphQL/RPC) منفصل عن التزام "مصدر واحد للعقد" | معتمد |
+| **SA-ADR-04** | **Command/Query Separation دون Event Sourcing كامل:** جهة الكتابة (تفرض Business Rules) منفصلة تمامًا عن جهة القراءة (Read Models/Projections)، لكن **لا** إعادة بناء الحالة بالكامل من الأحداث في كل قراءة — قرار نطاق (Scope)، وليس اختيار أداة | — (هذا القرار نفسه هو الآلية، لا أداة إضافية تحتاجه) | معتمد |
+| **SA-ADR-05** | **حدود ملكية حالة السيرفر في الـ Frontend:** نسخة واحدة فقط من أي بيانات قادمة من الـ Backend تُخزَّن في الذاكرة (Single Server-State Cache) — لا تكرار لنفس البيانات في أداتين مختلفتين للحالة | React Query كتطبيق حالي لهذا الالتزام؛ أي حالة UI بحتة (لا تمثِّل بيانات سيرفر) تُدار بأداة منفصلة تمامًا لتجنّب الخلط | معتمد |
+| **SA-ADR-06** | **Domain-Neutral Tenant Configuration Port:** الدومينز لا تستورد Platform للحصول على إعدادات Tenant. Shared يعرّف `ITenantConfigurationPort` محايدًا، وكل Domain يملك outbound port الخاص بحاجته؛ Sales يملك `INegativeStockPolicyProvider` في Application ويعطي Domain القيمة المحلولة فقط | Platform Infrastructure ينفّذ الـ shared port، وSales Infrastructure يكيّفه إلى port الخاص بـSales، والـComposition Root يربط التنفيذات فقط | معتمد |
 
 ---
 
 ## 15. Validation
 
-راجعت هذه الوثيقة مقابل Product Bible وRFC-001/002/003 وMaster-System-Flow. **لا تعارض مُكتشَف** — كل قرار هنا إما تطبيق مباشر لمبدأ مُثبَّت بالفعل (Modular Monolith، Event-Driven، Read Models، Capability Gating)، أو قرار تنفيذي جديد صريح مُعلَّم كـ SA-ADR بانتظار موافقتك، وليس مفروضًا كأمر واقع.
+راجعت هذه الوثيقة مقابل Product Bible وRFC-001/002/003 وMaster-System-Flow. **لا تعارض مُكتشَف.** يحتوي السجل على **6 SA-ADRs معتمدة**؛ أُضيف SA-ADR-06 عبر Issue #2 وفق RFC-005 Engineering Decision Process.
 
 ---
 
-*نهاية RFC-004. بانتظار مراجعتك لسجل SA-ADR (القسم 14) قبل اعتماد هذه الوثيقة كدستور تنفيذي نهائي.*
+*نهاية RFC-004 — Software Architecture المعتمدة.*

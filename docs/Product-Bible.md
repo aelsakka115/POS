@@ -2,7 +2,7 @@
 ### الجزء الأول من رؤية أوسع: AI Business OS
 
 **تاريخ الإصدار:** يوليو 2026
-**الحالة:** مسودة أولى معتمدة من جلسات التصميم التأسيسية
+**الحالة:** **Approved — changes require RFC-005 Change Management**
 **النطاق:** MVP — Cafe/Restaurant Vertical
 
 ---
@@ -46,6 +46,13 @@
 | **اللغة** | ثنائية اللغة (عربي/إنجليزي) من اليوم الأول، مع كون العربية اللغة الأساسية؛ RTL وLTR كلاهما Citizens من الدرجة الأولى في كل الطبقات (DB, API, UI, Reports, Notifications, AI) |
 | **العملة/الضرائب/التوقيت** | معماريًا: Multi-currency, Multi-tax, Multi-timezone, Multi-date-format منذ اليوم الأول، حتى لو المُفعّل تجاريًا في MVP هو إعداد مصر فقط |
 | **مبدأ التوسع الجغرافي** | التوسع لدول أخرى (مثل السعودية) يجب أن يتم عبر Configuration وBusiness Rules، وليس عبر إعادة كتابة النظام |
+
+### 2.1 العملات والقيم المالية
+
+- يدعم الـ Core أكثر من عملة دون استخدام قيم Floating-Point للأموال.
+- العقد المالي القياسي المشترك هو `Money { amountMinor: safe integer, currencyCode: validated ISO-4217 uppercase code }`.
+- لا يجوز إجراء عملية حسابية بين قيمتي Money بعملتين مختلفتين.
+- قد تكون Money العامة موجبة أو صفرية أو سالبة حين يسمح المفهوم التجاري بذلك؛ أما `BasePrice.amountMinor` و`OrderLine.unitPrice.amountMinor` فيجب أن يكونا أكبر من صفر. المنتجات المجانية ذات السعر الصفري غير صالحة في MVP.
 
 ---
 
@@ -271,12 +278,12 @@ POS يُكمل عملية بيع
 | ADR-14 | ~~Payroll يُنقَل إلى Phase 2~~ — **مُلغى، راجع ADR-26** | مُستبدَل |
 | ADR-15 | CRM تقترح أهلية الخصم فقط؛ Sales هي دائمًا من تُطبّق القرار المالي النهائي (راجع RFC-001) | معتمد |
 | ADR-16 | Expenses وPurchasing يبقيان Domains منفصلين معماريًا (راجع RFC-001) | معتمد |
-| ADR-17 | إضافة Shift Management كـ Domain مستقل Must-Have في MVP؛ SaleCompleted يشترط شيفتًا مفتوحًا (راجع RFC-001 §4.3، RFC-002) | معتمد |
+| ADR-17 | إضافة Shift Management كـ Domain مستقل Must-Have في MVP؛ كل Order يحمل `shiftId` إلزاميًا منذ إنشائه، و`SaleCompleted` يشترط شيفتًا مفتوحًا. Shift Management يعتمد على `OrderPlaced.shiftId` في Open Orders Counter ولا يستنتج الشيفت من `createdByEmployeeId?` (راجع RFC-001 §4.3، RFC-002) | معتمد |
 | ADR-18 | ModifierGroup كيان قابل لإعادة الاستخدام (Aggregate Root مستقل) وليس مملوكًا لمنتج واحد (راجع Domain-Menu.md) | معتمد |
 | ADR-19 | Modifiers قد تحمل تأثيرًا على الوصفة (Substitution/Addition)؛ Inventory يحسب الاستهلاك الفعلي بدمج Base Recipe + Modifier Impacts محليًا (راجع RFC-002 §9، Domain-Menu.md) | معتمد |
 | ADR-20 | StockItem مملوك حصريًا لـ Inventory (تصحيح لقرار سابق)؛ Menu.Recipe تشير فقط لـ `stockItemId` دون امتلاكه (راجع Domain-Inventory.md) | معتمد |
 | ADR-21 | Weighted Average Cost كطريقة تقييم مخزون في MVP؛ FIFO/Batch Tracking مؤجَّلة لـ Phase 2 | معتمد |
-| ADR-22 | NegativeStockPolicy قابلة للتهيئة لكل Tenant (Strict/Warning/Ignore) عبر Settings، وليست منطقًا مُرمَّزًا (راجع Domain-Inventory.md) | معتمد |
+| ADR-22 | `NegativeStockPolicy` قابلة للتهيئة لكل Tenant (`Strict`/`Warning`/`Ignore`، والافتراضي `Warning`) عبر Settings، وليست منطقًا مُرمَّزًا. Sales تقرأ القيمة المحلولة مرة واحدة عند بدء Create Order عبر port مملوك لطبقة Sales Application، دون استيراد Platform (راجع Domain-Inventory.md وRFC-004 SA-ADR-06) | معتمد |
 | ADR-23 | Recipe/Consumption Immutability: حركات المخزون الناتجة عن بيع تُخزَّن بكميات ثابتة، ولا تتأثر بتعديل الوصفة لاحقًا | معتمد |
 | ADR-24 | إضافة **Suppliers & Business Accounts** كـ Domain مستقل يملك بيانات المورد والالتزامات المالية (Accounts Payable, Payments, Aging)، منفصل تمامًا عن Purchasing التشغيلي (راجع RFC-001 §4.6) | معتمد |
 | ADR-25 | فاتورة الشراء أو المورد لا يزيدان المخزون مباشرة أبدًا؛ المخزون يتغيّر حصريًا عبر `GoodsReceived` من Purchasing | معتمد |
@@ -290,6 +297,7 @@ POS يُكمل عملية بيع
 | ADR-33 | إضافة `InventoryMovementRecorded` كحدث موحَّد يُنشَر لكل حركة مخزون بالتقييم المالي الكامل — يسد فجوة كان خصم المخزون الناتج عن البيع فيها غير مرئي خارج Inventory إطلاقًا (اكتُشفت أثناء تصميم Reporting) | معتمد |
 | ADR-34 | إضافة حقول إسناد موظف اختيارية (`createdByEmployeeId`, `completedByEmployeeId`, `preparedByEmployeeId`, `servedByEmployeeId`) لأحداث دورة حياة الطلب — لأغراض Reporting فقط (Top Cashiers/Baristas)، دون أي شرط تشغيلي جديد | معتمد |
 | ADR-35 | Reporting مُصمَّم كـ Pure Read Model Domain: لا يملك أي حقيقة عمل، لا ينشر أي حدث، ويستهلك كل الـ 48 حدث في RFC-002 دون استثناء. إعادة تشغيل الأحداث (Event Replay) كافية نظريًا لإعادة بناء كل تقرير من الصفر (راجع Domain-Reporting.md) | معتمد |
+| ADR-36 | **Canonical Money:** كل قيمة مالية مشتركة تستخدم `Money { amountMinor, currencyCode }`؛ لا Floating-Point، ولا عمليات بين عملات مختلفة. Menu يملك السعر الحالي والمجدول، وSales ينسخ السعر الحالي إلى `OrderLine.unitPrice` كـ Snapshot ثابت لا يُعاد تسعيره لاحقًا | معتمد |
 
 ---
 

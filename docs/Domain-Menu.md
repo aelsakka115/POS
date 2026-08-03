@@ -4,7 +4,7 @@
 **Domain Classification:** Core Business Domain (Cafe Engine)
 **Depends on:** RFC-001 (Context Map), RFC-002 (Event Catalog)
 **Reference Template:** Domain-Sales.md
-**Status:** Draft v1
+**Status:** **Approved — Business Rule changes require RFC-005 Change Management**
 
 ---
 
@@ -49,7 +49,7 @@
 | **Modifier** | خيار تخصيص مفرد داخل ModifierGroup، قد يحمل فرق سعر (Price Delta) موجب أو صفري، وقد يحمل **تأثيرًا على الوصفة (Recipe Impact)** اختياريًا |
 | **ModifierRecipeImpact** | تعريف أثر اختيار Modifier معيّن على الاستهلاك الفعلي من المخزون: إما **Substitution** (استبدال مكوّن بمكوّن آخر بكمية محددة) أو **Addition** (إضافة كمية لمكوّن موجود بالفعل) |
 | **PreparationInfo** | معلومات تشغيلية مرتبطة بالمنتج: المحطة المسؤولة عن تحضيره (Station)، الوقت التقديري للتحضير — يستهلكها Order Fulfillment للتوجيه والجدولة |
-| **BasePrice** | السعر الأساسي للمنتج قبل أي خصم يُطبَّق وقت البيع، له تاريخ نفاذ (Effective Date) |
+| **BasePrice** | `Money` موجبة يملكها Menu؛ قد تكون حالية أو مجدولة بتاريخ نفاذ. الأسعار المجدولة لا تخرج من Menu قبل نفاذها |
 
 > **ملاحظة على النطاق:** المفاهيم (Modifiers, PreparationInfo, ModifierRecipeImpact) لم تكن مذكورة صراحة في التعريف الأول لـ Menu داخل RFC-001 §4.3 (لاحقًا §4.4)، وهي امتداد طبيعي ضروري لتغذية Order Fulfillment وInventory بمعلومات كافية دون افتراضات مرتجلة. يُعتبر هذا تحديثًا ضمنيًا لنطاق Menu، لا يغيّر أي حد من حدود الدومينز الأخرى.
 
@@ -59,9 +59,10 @@
 
 1. كل MenuItem يجب أن ينتمي لفئة (Category) واحدة على الأقل.
 2. لا يمكن تفعيل (`MenuItemActivated`) منتج يحتاج تحضيرًا دون وصفة (Recipe) مُعرَّفة مسبقًا.
-3. لا يمكن تفعيل منتج دون سعر أساسي (BasePrice) صالح (قيمة موجبة).
+3. لا يمكن تفعيل منتج دون `BasePrice` صالح بحيث `amountMinor > 0` و`currencyCode` رمز ISO-4217 uppercase متحقق منه. المنتجات ذات السعر الصفري غير صالحة في MVP.
 4. تعديل وصفة قائمة (`RecipeUpdated`) لا يؤثر على أي معاملة بيع سابقة اكتملت قبل التعديل — يُطبَّق فقط على عمليات البيع اللاحقة.
-5. تغيير السعر الأساسي (`MenuItemPriceChanged`) له تاريخ نفاذ (`effectiveFrom`) لا يجوز أن يكون في الماضي.
+5. تغيير السعر الأساسي له تاريخ نفاذ (`effectiveFrom`) لا يجوز أن يكون في الماضي. يبقى مجدولًا داخل Menu، وعند لحظة النفاذ يصبح السعر الحالي وينشر Menu `MenuItemPriceChanged` idempotently باستخدام `priceChangeId`.
+5ب. تغيير BasePrice لاحقًا لا يعيد تسعير Order موجود؛ Sales تكون قد حفظت `OrderLine.unitPrice` Snapshot عند `OrderPlaced`.
 6. كل Modifier داخل ModifierGroup يجب أن ينتمي لمجموعة واحدة فقط؛ لا ازدواج انتماء.
 7. تعطيل منتج (`MenuItemDeactivated`) يمنع إضافته لأي طلب بيع جديد بأثر فوري، لكن لا يؤثر على طلبات قائمة بالفعل تحتوي عليه.
 8. كل مكوّن مُشار إليه داخل Recipe يجب أن يكون معرَّفًا في Inventory كـ Master Data (لا يجوز الإشارة لمكوّن غير موجود).
@@ -81,7 +82,8 @@
 2. يُعرَّف السعر الأساسي (BasePrice).
 3. إن كان المنتج يحتاج تحضيرًا: تُعرَّف Recipe (مكونات وكميات) وPreparationInfo (المحطة، الوقت التقديري).
 4. عند استيفاء كل الشروط المسبقة (القسم 5): يُفعَّل المنتج وتُنشر `MenuItemActivated`.
-5. Sales وOrder Fulfillment وReporting يستهلكون الحدث — أصبح المنتج متاحًا للبيع.
+5. يحمل `MenuItemActivated` السعر الأساسي الحالي وتاريخ نفاذه لبناء Projection البيع، بينما تظل أي جداول أسعار مستقبلية داخل Menu فقط.
+6. Sales وOrder Fulfillment وReporting يستهلكون الحدث — أصبح المنتج متاحًا للبيع.
 
 ### 6.2 تعديل وصفة منتج قائم
 
@@ -141,6 +143,8 @@
 | `MenuItemActivated` | عند تفعيل منتج جديد أو إعادة تفعيله |
 | `MenuItemDeactivated` | عند تعطيل منتج |
 | `ModifierRecipeImpactUpdated` | عند تعريف أو تعديل أثر Modifier معيّن على استهلاك المخزون (استبدال/إضافة) |
+
+`MenuItemActivated` و`MenuItemPriceChanged` و`MenuItemDeactivated` تغذي `MenuItemSalesReadModel` لدى Sales. `MenuItemPriceChanged` لا يُنشر عند مجرد جدولة السعر، بل عند نفاذه، وبمفتاح `priceChangeId`.
 
 ---
 

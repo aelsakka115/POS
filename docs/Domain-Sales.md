@@ -3,7 +3,7 @@
 **Type:** Domain Document
 **Domain Classification:** Core Business Domain (Cafe Engine)
 **Depends on:** RFC-001 (Context Map), RFC-002 (Event Catalog)
-**Status:** Draft v1
+**Status:** **Approved — Business Rule changes require RFC-005 Change Management**
 
 ---
 
@@ -31,7 +31,7 @@
 |---------|---------------------|----------|
 | بوابات الدفع الفعلية (Payment Gateways) | Sales تُسجّل طريقة وحالة الدفع فقط كخاصية على المعاملة، لا تدير تكامل بوابات دفع متعددة | Domain مستقبلي منفصل (Payments) |
 | خصم المخزون | Sales تنشر حدث فقط؛ لا تنفّذ أي منطق مخزني | Inventory |
-| تعريف المنتجات وأسعارها الأساسية | Sales تستهلك السعر المُعرَّف، لا تُنشئه | Menu |
+| تعريف المنتجات وأسعارها الحالية أو المجدولة | Sales تستهلك السعر الحالي فقط عبر Read Model محلي، ولا تنشئه أو تحفظ جدول نسخ الأسعار المستقبلية | Menu |
 | بيانات العميل ونقاط الولاء | Sales تستهلك `customerId` فقط كمرجع | CRM |
 | تتبع تنفيذ الطلب (Preparing/Ready/Served) | مسؤولية تشغيلية منفصلة تمامًا عن القرار المالي | Order Fulfillment |
 | اقتراح أهلية الخصم | Sales تستقبل الاقتراح فقط وتقرر التطبيق | CRM |
@@ -42,8 +42,9 @@
 
 | المفهوم | التعريف |
 |---------|---------|
-| **Order** | تمثيل رحلة تنفيذ الطلب داخل الكافيه (حالة تشغيلية)، **كيان منفصل تمامًا عن Sale** — Sale تشير إليه عبر `orderId` كمرجع صريح، وليس نفس الكيان بحالتين. هذا الفصل يسمح مستقبلًا بـ Split Payments (طلب واحد، أكثر من معاملة دفع)، Table Transfer، وMerge Orders دون تعقيد بنية Sale نفسها |
-| **OrderLine** | بند مفرد داخل الطلب: منتج، كمية، سعر وحدة وقت الإضافة، ملاحظات اختيارية |
+| **Order** | تمثيل رحلة تنفيذ الطلب داخل الكافيه (حالة تشغيلية)، ويحمل `shiftId` إلزاميًا. **كيان منفصل تمامًا عن Sale** — Sale تشير إليه عبر `orderId` كمرجع صريح، وليس نفس الكيان بحالتين. هذا الفصل يسمح مستقبلًا بـ Split Payments، Table Transfer، وMerge Orders دون تعقيد بنية Sale نفسها |
+| **OrderLine** | بند مفرد داخل الطلب: منتج، كمية، و`unitPrice: Money` موجبة تُنسخ من السعر الحالي وقت إنشاء Order وتبقى Snapshot ثابتًا، مع ملاحظات اختيارية |
+| **MenuItemSalesReadModel** | Projection محلي داخل Sales بالحقول فقط: `tenantId`, `menuItemId`, `isActive`, `currentBasePrice: Money`, `priceEffectiveFrom`, `lastChangedAt`. لا يحتوي `priceVersions[]` أو جداول مستقبلية أو Inventory availability أو Preparation Info أو Modifier pricing |
 | **Sale** | المعاملة المالية، تحمل `orderId` كمرجع للطلب التشغيلي الذي نشأت منه — غير قابلة للتعديل بعد الإتمام (Immutable) إلا عبر Refund |
 | **Invoice** | التمثيل الرسمي/المطبوع للمعاملة، مُشتق من Sale، وليس كيانًا منفصلًا له دورة حياة خاصة |
 | **Discount** | تخفيض قيمة مُطبَّق على معاملة، إما يدويًا من الكاشير أو بناءً على اقتراح خارجي (CRM) |
@@ -73,6 +74,7 @@
 15. **عند `NegativeStockPolicy=Strict` (سياسة Tenant، مُعرَّفة في Domain-Inventory.md):** لا يُقبَل أي بند في `OrderPlaced` لمنتج (`menuItemId`) مُصنَّف حاليًا كغير متاح (`isAvailable=false`) في الـ Availability Read Model المحلي لـ Sales (مُحدَّث من `ItemAvailabilityChanged`). **Sales لا تعرف مستويات المخزون نفسها إطلاقًا** — فقط حالة "متاح/غير متاح" لكل منتج، محسوبة بالكامل داخل Inventory. هذا التحقق **Eventually Consistent وليس ضمانًا فوريًا مطلقًا** (راجع الملاحظة المعمارية في RFC-002 §6.6) — في حالات نادرة جدًا من التزامن الدقيق، قد يُقبَل طلب قبل وصول تحديث الحالة؛ Inventory يبقى خط الدفاع الأخير وقت معالجة `SaleCompleted` الفعلي.
 16. عند `NegativeStockPolicy=Warning` أو `Ignore`، حالة عدم التوفر لا تمنع إنشاء الطلب — قد تُعرَض كمعلومة استشارية فقط للكاشير (قرار UX، ليس قيدًا معماريًا).
 17. `createdByEmployeeId` (على `OrderPlaced`) و`completedByEmployeeId` (على `SaleCompleted`) **حقلان اختياريان دائمًا** — لأغراض تحليلية بحتة (Reporting KPIs مثل Top Cashiers)، وليسا شرطًا مسبقًا لأي من الحدثين.
+18. **لا يمكن إنشاء Order أو نشر `OrderPlaced` إلا إذا احتوى Order على `OrderLine` واحد صالح على الأقل. يكون `OrderLine` صالحًا لهذه القاعدة إذا كان `quantity > 0`، وكان `menuItemId` موجودًا وفعّالًا في `MenuItemSalesReadModel`، وكان له `currentBasePrice` صالح بقيمة موجبة يمكن نسخه إلى `OrderLine.unitPrice` وقت إنشاء Order. يجب أن تستخدم كل بنود Order عملة واحدة. التحقق من توفر المخزون لا يدخل في تعريف صلاحية البند هنا؛ بل يُطبَّق بصورة مستقلة وفق Business Rules #15 و#16.**
 
 ---
 
@@ -80,12 +82,14 @@
 
 ### 6.1 إتمام عملية بيع عادية (Happy Path)
 
-1. الكاشير يُنشئ Order ببند أو أكثر — **بشرط وجود شيفت مفتوح** (Business Rule #13).
-2. Sales تنشر `OrderPlaced` (يحمل `orderId`) → Order Fulfillment يبدأ التنفيذ التشغيلي (بالتوازي، لا يمنع استكمال البيع ماليًا).
-3. الكاشير (أو النظام) يُطبّق خصمًا إن وُجد — يدويًا، أو بناءً على `DiscountEligibilityFlagged` من CRM.
-4. الكاشير يُثبّت طريقة الدفع ويعتمد السداد.
-5. Sales تتحقق من استيفاء كل الشروط المسبقة (القسم 5) وتُصدر `SaleCompleted` حاملًا `orderId` كمرجع صريح للطلب الأصلي.
-6. Inventory وCRM وReporting وNotifications يستهلكون الحدث كل حسب مسؤوليته.
+1. عند بدء Create Order، تقرأ Sales `NegativeStockPolicy` مرة واحدة عبر `INegativeStockPolicyProvider` (الافتراضي `Warning`) وتتحقق من Business Rules #13 و#15 و#16 و#18.
+2. تنسخ Sales `MenuItemSalesReadModel.currentBasePrice` الموجب إلى `OrderLine.unitPrice` لكل بند. كل البنود تستخدم عملة واحدة، وأي تغيّر سعر لاحق لا يعيد تسعير Order.
+3. في أول Slice تنفيذي فقط، يجب أن يكون `selectedModifierIds.length === 0`. أي قائمة غير فارغة تُرفض صراحةً؛ لا تُتجاهل، ولا تُسعَّر بالسعر الأساسي فقط، ولا تُحفَظ، ولا يُنشر `OrderPlaced`.
+4. Sales تنشر `OrderPlaced` حاملًا `orderId` و`shiftId` الإلزاميين → Order Fulfillment يبدأ التنفيذ التشغيلي.
+5. الكاشير (أو النظام) يُطبّق خصمًا إن وُجد — يدويًا، أو بناءً على `DiscountEligibilityFlagged` من CRM.
+6. الكاشير يُثبّت طريقة الدفع ويعتمد السداد.
+7. Sales تتحقق من استيفاء كل الشروط المسبقة وتُصدر `SaleCompleted` حاملًا `orderId` كمرجع صريح للطلب الأصلي.
+8. Inventory وCRM وReporting وNotifications يستهلكون الحدث كل حسب مسؤوليته.
 
 ### 6.2 تطبيق خصم مُقترَح من CRM
 
@@ -146,6 +150,9 @@
 | `ShiftOpened` | Shift Management | يُحدِّث Read Model محلي داخل Sales يشير إلى وجود شيفت مفتوح — شرط مسبق لكل من `OrderPlaced` و`SaleCompleted` |
 | `ShiftClosed` | Shift Management | يُحدِّث نفس الـ Read Model ليشير إلى إغلاق الشيفت — يمنع أي `OrderPlaced` أو `SaleCompleted` جديد لهذا الشيفت بعد هذه اللحظة |
 | `ItemAvailabilityChanged` | Inventory | يُحدِّث Read Model محلي بحالة "متاح/غير متاح" لكل منتج — **بدون أي مستوى مخزون فعلي** — يُستخدَم كبوابة تحقق عند `NegativeStockPolicy=Strict` فقط (راجع Business Rule #15) |
+| `MenuItemActivated` | Menu | ينشئ/يحدّث `MenuItemSalesReadModel` بالسعر الأساسي الحالي الموجب ويجعل الصنف فعّالًا |
+| `MenuItemPriceChanged` | Menu | يحدّث `currentBasePrice`, `priceEffectiveFrom`, و`lastChangedAt` بصورة idempotent عبر `priceChangeId`; لا يحتفظ بالجدول المستقبلي ولا يعيد تسعير Orders قائمة |
+| `MenuItemDeactivated` | Menu | يجعل الصنف غير فعّال للطلبات الجديدة دون التأثير على Orders قائمة |
 
 ---
 
@@ -168,8 +175,9 @@
 > **ملاحظة معمارية:** هذا القسم يُترك أعلى مستوى فقط في هذه المرحلة (High-Level Schema Direction)، تمشيًا مع مبدأ "بناء المعمارية من المسؤوليات التجارية أولًا". التصميم التفصيلي الكامل لقاعدة البيانات (الحقول، الفهارس، القيود) يُبنى في وثيقة منفصلة بعد اعتماد هذا الـ Domain Document.
 
 جداول مرشحة (اتجاه عام فقط):
-- `orders` (tenant_id, branch_id, shift_id, created_by_employee_id?, status, created_at, ...) — **كيان منفصل عن `sales`**
-- `order_lines` (order_id, menu_item_id, quantity, selected_modifier_ids[], notes, ...)
+- `orders` (tenant_id, branch_id, shift_id, created_by_employee_id?, status, created_at, ...) — `shift_id` إلزامي، والكيان منفصل عن `sales`
+- `order_lines` (order_id, menu_item_id, quantity, unit_price_amount_minor, currency_code, selected_modifier_ids[], notes, ...) — السعر Snapshot ثابت موجب
+- `menu_item_sales_read_model` (tenant_id, menu_item_id, is_active, current_base_price_amount_minor, currency_code, price_effective_from, last_changed_at) — بلا تاريخ أسعار أو جداول مستقبلية
 - `sales` (tenant_id, branch_id, order_id, shift_id, customer_id?, completed_by_employee_id?, total_amount, payment_status, payment_method, completed_at, ...)
 - `sale_lines` (sale_id, menu_item_id, quantity, unit_price, ...)
 - `sale_discounts` (sale_id, discount_type, value, applied_by, source, ...)
