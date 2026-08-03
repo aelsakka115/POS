@@ -60,7 +60,7 @@
 | **Publisher** | Sales |
 | **Subscribers** | Order Fulfillment, Shift Management (عدّاد الطلبات المفتوحة) |
 | **Trigger** | العميل/الكاشير يُنشئ طلبًا جديدًا ببنوده (Order Lines) ويُرسله للتنفيذ |
-| **Payload (High-Level)** | `orderId, tenantId, branchId, shiftId, createdByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice: Money, selectedModifierIds[], notes?}], createdAt` |
+| **Payload (High-Level)** | `eventName: "OrderPlaced", tenantId, orderId, branchId, shiftId, createdByEmployeeId?, orderLines[{menuItemId, quantity, unitPrice: Money, selectedModifierIds[], notes?}], createdAt` |
 | **Business Meaning** | "هذا الطلب مُعتمَد للبيع ويحتاج تنفيذًا فعليًا في المطبخ/محطة العمل" |
 | **Business Preconditions** | Order يحتوي على `OrderLine` صالح واحد على الأقل؛ كل كمية موجبة، وكل `menuItemId` فعّال في `MenuItemSalesReadModel` وله `currentBasePrice` موجب صالح يُنسخ إلى `unitPrice`; كل البنود تستخدم عملة واحدة; الطلب لم يُنشر مسبقًا; **`shiftId` إلزامي ويشير لشيفت مفتوح**. `createdByEmployeeId?` اختياري ولا يُستخدم لاستنتاج الشيفت |
 | **Idempotency** | نعم — `orderId` فريد؛ استهلاك مكرر لنفس `orderId` يجب أن يُتجاهَل من قِبل Order Fulfillment (Idempotent Consumer) |
@@ -396,9 +396,9 @@
 | **Publisher** | Menu |
 | **Subscribers** | Sales (Read Model), Reporting |
 | **Trigger** | وصول تغيير مجدول للسعر الأساسي إلى وقت نفاذه |
-| **Payload (High-Level)** | `tenantId, priceChangeId, menuItemId, oldPrice: Money, newPrice: Money, effectiveFrom, changedAt` |
+| **Payload (High-Level)** | `eventName: "MenuItemPriceChanged", tenantId, priceChangeId, menuItemId, oldPrice: Money, newPrice: Money, effectiveFrom, changedAt` |
 | **Business Meaning** | "أصبح هذا السعر هو السعر الحالي النافذ؛ تحدّث Sales نسختها الحالية فقط، ولا تُعاد تسعير Orders قائمة" |
-| **Business Preconditions** | المنتج (`menuItemId`) موجود وفعّال; `newPrice` قيمة موجبة صالحة; `effectiveFrom` تاريخ مستقبلي أو حالي، وليس تاريخًا ماضيًا |
+| **Business Preconditions** | عند **جدولة** التغيير أصلًا: المنتج (`menuItemId`) موجود وفعّال، و`newPrice` قيمة موجبة صالحة، و`effectiveFrom` ليس في الماضي وقت الجدولة. عند **نشر** الحدث: أصبح السعر نافذًا (`effectiveFrom <= changedAt`)؛ النشر المتأخر أو إعادة المحاولة مسموحان ويظلان idempotent عبر `priceChangeId` |
 | **Idempotency** | نعم — `priceChangeId` هو مفتاح الـ Idempotency؛ يُنشر الحدث idempotently مرة نفاذ التغيير المجدول |
 | **Classification** | Internal Domain Event |
 
@@ -409,7 +409,7 @@
 | **Publisher** | Menu |
 | **Subscribers** | Sales, Order Fulfillment, Reporting |
 | **Trigger** | تفعيل منتج جديد أو إعادة تفعيل منتج مُعطَّل مسبقًا، فيصبح متاحًا للبيع |
-| **Payload (High-Level)** | `tenantId, menuItemId, categoryId, basePrice: Money, priceEffectiveFrom, activatedAt` |
+| **Payload (High-Level)** | `eventName: "MenuItemActivated", tenantId, menuItemId, categoryId, basePrice: Money, priceEffectiveFrom, activatedAt` |
 | **Business Meaning** | "هذا المنتج أصبح قابلًا للإضافة لأي طلب بيع جديد" |
 | **Business Preconditions** | المنتج يملك وصفة (Recipe) مُعرَّفة إن كان منتجًا يحتاج تحضيرًا; المنتج يملك سعرًا أساسيًا صالحًا; المنتج مرتبط بفئة (Category) موجودة |
 | **Idempotency** | نعم — `menuItemId` كمفتاح؛ تفعيل مكرر لمنتج مُفعَّل بالفعل يُتجاهَل |

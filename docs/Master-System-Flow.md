@@ -190,7 +190,7 @@ Payroll           → PayrollRunCompleted                          → Reporting
 | **No Direct Cross-Domain Calls** | Product Bible، صمد حتى في أصعب اختبار (Strict Policy — System Freeze v1 Finding #3) | حُلَّت كل الحالات الصعبة بـ Read Models بدل كسر القاعدة |
 | **Modular Monolith First** | Product Bible ADR-03 | لا Microservices حتى الآن؛ كل الدومينز داخل نفس الوحدة التشغيلية |
 | **Eventual Consistency كـ Trade-off موثَّق وليس ثغرة مخفية** | RFC-002 §6.6، System Freeze v1 §4 | صراحة في كل مكان يُستخدَم فيه (خصوصًا Item Availability RM) |
-| **Per-Tenant Ordered Delivery** | RFC-002 §16 Rule 8 | أساس كل قواعد الـ Immutability والـ Read Models المحلية |
+| **Per-Tenant Ordered Delivery** | RFC-002 §17 Rule 8 | أساس كل قواعد الـ Immutability والـ Read Models المحلية |
 | **Two-Layer Defense كنمط لقرارات حرجة** | Domain-Inventory.md Business Rule #4 | Sales (وقائي، Eventually Consistent) + Inventory (Backstop نهائي) — نفس النمط قابل لإعادة الاستخدام مستقبلًا لقرارات مشابهة |
 
 ---
