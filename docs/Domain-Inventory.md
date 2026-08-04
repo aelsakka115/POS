@@ -215,6 +215,13 @@ Inventory هو **المصدر الوحيد للحقيقة (Single Source of Trut
 
 ---
 
+## 12A. Offline-first execution constraint (RFC-006)
+
+- Stock movements والجرد والتوفر واستهلاك البيع Branch-authoritative وتستمر على Edge دون Internet.
+- كل movement immutable وله idempotency identity ثابت؛ Cloud لا يدمج الكميات بـtimestamp أو Last-write-wins.
+- StockItem/Recipe/configuration المركزية تصل كـversioned snapshots، وحركات الفرع تصعد عبر Outbox/Inbox.
+- reconnect وduplicate delivery لا يكرران الاستهلاك أو Weighted Average Cost effect.
+
 ## 13. Future Extensions
 
 - **Batch/Lot Tracking & Expiry:** إضافة تتبع دُفعات وتواريخ صلاحية لكل StockMovement إدخال، مع دعم FIFO كطريقة تقييم بديلة عند الحاجة — التصميم الحالي (حقول nullable قابلة للتوسعة) يسمح بذلك دون إعادة هيكلة جذرية.

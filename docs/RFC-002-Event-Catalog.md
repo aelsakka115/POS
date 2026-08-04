@@ -769,10 +769,13 @@
 5. **Audit Logs (Supporting Domain)** يستمع ضمنيًا لكل الأحداث أعلاه دون استثناء لغرض التدقيق، ولم يُذكر صراحة في كل صف تفاديًا للتكرار.
 6. **Recipe/Consumption Immutability:** أي حركة مخزون ناتجة عن استهلاك (بيع) تُخزَّن بكمياتها الفعلية كأرقام ثابتة وقت الحدوث، مع الاحتفاظ بمرجع لنسخة الوصفة المُستخدَمة (`recipeVersionUsed`) لأغراض التدقيق فقط. لا يوجد أي مسار يُعيد حساب استهلاك سابق بناءً على وصفة مُحدَّثة لاحقًا.
 7. **Tenant-Level Policies:** أي سياسة قابلة للتهيئة تؤثر على قرار Domain تشغيلي (مثل `NegativeStockPolicy`) تُدار عبر **Settings** (Platform Domain)، وتصل للدومين المعني عبر الـports المعتمدة في RFC-004 SA-ADR-06 — وليست جزءًا من منطق العمل المُرمَّز ولا سببًا لاستيراد Platform. يقرأ Create Order السياسة مرة واحدة عند البداية.
-8. **Event Ordering Guarantee:** داخل بنية Modular Monolith الحالية، يضمن الـ Event Bus **تسليم الأحداث بنفس ترتيب نشرها لكل Tenant على حدة** (Per-Tenant Ordered Delivery). هذا الضمان هو الأساس الذي تعتمد عليه كل قواعد الـ Immutability والـ Read Models المحلية (مثل: `RecipeUpdated` يصل دائمًا قبل أي `SaleCompleted` يستخدم تلك النسخة، و`SupplierCreated` يصل قبل أي `PurchaseOrderCreated` يشير له). أي انتقال مستقبلي لبنية موزَّعة (Microservices) **يجب أن يحافظ على هذا الضمان صراحة** (مثال: عبر Partitioning بالـ `tenantId` في طابور الرسائل)، وإلا فكل الـ Business Rules المبنية عليه تحتاج مراجعة كاملة.
+8. **Event Ordering Guarantee:** داخل كل Transactional Outbox محلي يضمن Event Router ترتيب النشر الحتمي. عند عبور Edge/Cloud، الترتيب المضمون هو لكل origin stream محدد بـ`tenantId + branchId + originNodeId` باستخدام `originSequence` (RFC-006)، وليس ترتيبًا كليًا مصطنعًا بين فروع مستقلة. Cloud-authoritative snapshots تحمل resource versions، والـBusiness Rules التي تحتاج سابقًا محددًا لا تعالج الرسالة التالية عند وجود sequence gap.
 9. **Employee Attribution Fields اختيارية دائمًا:** `createdByEmployeeId` (OrderPlaced)، `completedByEmployeeId` (SaleCompleted)، `preparedByEmployeeId` (OrderReady)، `servedByEmployeeId` (OrderServed) — كلها حقول **اختيارية (Nullable)**، وليست شرطًا مسبقًا (Business Precondition) لأي من هذه الأحداث. كافيه بموظف واحد أو بيئة لا تتطلب إسنادًا فرديًا دقيقًا يمكنها تجاهلها دون كسر أي Business Rule. الغرض الوحيد منها تحليلي (Reporting KPIs مثل Top Cashiers/Baristas)، وليس تشغيليًا.
 10. **Canonical Money:** كل حقل مالي مشار إليه كـ `Money` يستخدم `amountMinor` كـ safe integer و`currencyCode` كرمز ISO-4217 uppercase متحقق منه. تُمنع قيم Floating-Point والعمليات بين عملات مختلفة. قد تكون Money العامة signed حين يسمح المفهوم؛ أما `BasePrice` و`OrderLine.unitPrice` فموجبان حتمًا.
 11. **Shift Binding:** `OrderPlaced.shiftId` إلزامي، ويستخدمه Shift Management مباشرة لتحديث Open Orders Counter. لا يجوز استخدام `createdByEmployeeId?` لاستنتاج الشيفت.
+12. **Branch Edge Synchronization:** عند عبور حدث بين Edge وCloud يحتفظ Domain payload و`eventName` كما هما، ويُغلَّف بـSync metadata المحدد في RFC-006 (`syncMessageId`, `eventId`, `tenantId`, `branchId`, `originNodeId`, `originSequence`, `schemaVersion`, timestamps). هذه الحقول ليست Business payload جديدًا للأحداث الـ48.
+13. **Offline Ordering:** الترتيب المحلي داخل Transactional Outbox يبقى حتميًا. عبر Edge/Cloud، الترتيب المضمون هو `originSequence` لكل `tenantId + branchId + originNodeId`؛ `createdAt` لا يُستخدم لحل التعارض أو إعادة ترتيب الرسائل. Sequence gap يوقف stream المعني حتى استكماله.
+14. **Offline Idempotency and Immutability:** النقل at-least-once، وكل مستهلك عابر للعقدة يملك Inbox durable. `eventId` وsequence ثابتان عبر retry. Last-write-wins ممنوع للأحداث المالية والتشغيلية، والتصحيح يتم فقط بحدث تعويضي معتمد.
 
 ---
 
@@ -783,6 +786,7 @@
 - يحتوي الكتالوج على **48 Event contracts** فعلية.
 - تحتوي Full Subscription Matrix (§16) على **48 صفًا**، صف واحد لكل Event contract.
 - تغييرات Issue #2 لا تضيف Event جديدًا؛ تحدّث Payloads وSubscribers للأحداث المعتمدة فقط.
+- تغييرات Issue #5 لا تضيف Event جديدًا؛ تضيف Sync envelope وقواعد نقل خارج Domain payload وفق RFC-006.
 
 مع اعتماد RFC-002، الحدود والعقود الحدثية أصبحت مستقرة بما يكفي للبدء في:
 

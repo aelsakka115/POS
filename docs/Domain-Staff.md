@@ -176,6 +176,13 @@
 
 ---
 
+## 12A. Offline access constraint (RFC-006)
+
+- Staff يظل مصدر employee identity/status، وPlatform Auth يملك credentials/roles/capabilities.
+- Edge يخزن branch access projection وsalted Argon2id Offline PIN hash فقط، لا plaintext PIN ولا Cloud credential.
+- Offline login ينتهي بعد 7 أيام من آخر access sync؛ deactivation/capability removal يسري عند أول sync، ونافذة الانقطاع تُدقَّق.
+- كل Offline command يسجل employee وEdge identity والوقت وauthorization snapshot version.
+
 ## 13. Future Extensions
 
 - **Shift Scheduling الكامل:** محرك جدولة فعلي (تقويم، تناوب، نوبات متعددة) يبني فوق `DefaultShiftAssignment` الحالي دون استبداله بالضرورة.

@@ -34,6 +34,7 @@
 | 5 | Tenant-Aware Application, Infrastructure-Flexible | طبقة التطبيق لا تفترض مكان تخزين بيانات المستأجر؛ يمكن لاحقًا نقل عملاء محددين لبنية تحتية مختلفة دون تعديل منطق الأعمال. |
 | 6 | Permission-First Authorization | الصلاحيات الذرية (Atomic Permissions) هي أساس النظام، والأدوار (Roles) مجرد قوالب قابلة للتخصيص فوقها. |
 | 7 | Country-Agnostic Core | لا ترميز (Hardcoding) لقواعد ضريبية أو تنظيمية خاصة بدولة معينة داخل الـ Core؛ الامتثال المحلي (مثل e-Invoice) يُبنى كطبقة Adapter منفصلة. |
+| 8 | Offline-first Branch Operation | الفرع يكمل دورته التشغيلية على LAN لعدة أيام دون Internet؛ Cloud للإدارة والتجميع والمزامنة وليس شرطًا لقبول البيع. |
 
 ---
 
@@ -112,7 +113,7 @@
 
 - الفوترة الإلكترونية الحكومية (مثل ETA المصرية) — ستُبنى لاحقًا كطبقة Adapter قُطرية منفصلة عن الـ Core
 - نظام اشتراكات وفوترة SaaS كامل — الإدارة تكون يدوية في MVP
-- النشر الذاتي (Self-hosted) — Cloud SaaS فقط في MVP
+- النشر الذاتي العام الذي يديره العميل (Customer-managed Self-hosting). **Branch Edge المُدار من Cafe Engine جزء إلزامي من المنتج وليس Self-hosting** (RFC-006)
 - محركات صناعية أخرى (عيادات، مقاولات، تجزئة...)
 
 ---
@@ -156,7 +157,7 @@ Permission (Atomic) → Role (Template قابل للتخصيص) → User
 
 ### 5.1 نمط النظام: Modular Monolith
 
-- وحدة تشغيلية واحدة (Single Deployable Unit) منظمة داخليًا إلى Modules واضحة الحدود.
+- Modular Monolith واحد في الـCodebase بحدود Modules واضحة؛ له Composition/Deployment role محلي على Branch Edge ودور سحابي مركزي دون تحويل الدومينات إلى Microservices.
 - لا Microservices في MVP — تجنب تعقيد الأنظمة الموزعة مبكرًا.
 - أي Module يكبر لاحقًا بما يكفي (AI, Notifications, Automation, Reporting) يمكن استخراجه كخدمة مستقلة دون إعادة تصميم المنصة بالكامل.
 
@@ -202,10 +203,14 @@ POS يُكمل عملية بيع
 - طبقة التطبيق تبقى "Tenant-Aware" فقط، بينما طبقة البنية التحتية تقرر أين تُخزَّن بيانات كل Tenant.
 - عملاء Enterprise مستقبليون يمكن نقلهم إلى قاعدة بيانات مخصصة (Dedicated DB) دون تعديل كود التطبيق، عبر "Tenant Context Resolver" يحدد مصدر البيانات لكل طلب.
 
+**استثناء تشغيلي إلزامي للـ Offline-first:** كل فرع يملك PostgreSQL محلية داخل `Branch Edge` ومربوطة بـ`tenantId + branchId` واحدين. هذه ليست قاعدة Cloud مخصصة للـTenant؛ هي Operational Store محلي يتزامن مع الـCloud وفق RFC-006 مع استمرار RLS وApplication Authorization.
+
 ### 5.5 نموذج النشر (Deployment Model)
 
-- **MVP:** Cloud SaaS فقط. النشر الذاتي (Self-hosted) خارج النطاق صراحة.
-- القرار مؤجل لما بعد تحقيق Product-Market Fit، لكن المعمارية لا تُغلق الباب أمامه مستقبلًا (بفضل فصل Core عن Infrastructure في 5.4).
+- **MVP:** Cloud-managed SaaS مع `Branch Edge` مُدار من Cafe Engine على جهاز Windows رئيسي في كل فرع، وقاعدة PostgreSQL محلية مشتركة عبر LAN.
+- الدورة التشغيلية الأساسية يجب أن تستمر لعدة أيام بدون Internet؛ Cloud يبقى مركز الإدارة والتجميع والتقارير والأسطول.
+- Branch Edge ليس Customer-managed Self-hosting. النشر الذاتي العام لمنصة Cloud بالكامل ما زال خارج MVP.
+- آلية الملكية والمزامنة والأمان والنسخ الاحتياطي محددة في RFC-006.
 
 ### 5.6 التعامل مع Supabase (Vendor Abstraction)
 
@@ -268,7 +273,7 @@ POS يُكمل عملية بيع
 | ADR-04 | Domain Events إلزامية بين الـ Modules | معتمد |
 | ADR-05 | Permission-First Authorization (Atomic Permissions) | معتمد |
 | ADR-06 | Shared DB + Shared Schema + RLS (Hybrid مستقبلًا) | معتمد |
-| ADR-07 | Cloud SaaS فقط في MVP، Self-hosted مؤجل | معتمد |
+| ADR-07 | ~~Cloud-dependent SaaS فقط في MVP~~ — **مُستبدَل بـ ADR-37**؛ Customer-managed Self-hosting ما زال مؤجلًا | مُستبدَل |
 | ADR-08 | Supabase مع طبقات Abstraction إلزامية | معتمد |
 | ADR-09 | Core Platform منفصل عن Cafe Engine | معتمد |
 | ADR-10 | AI-Ready, Not AI-Dependent | معتمد |
@@ -298,6 +303,7 @@ POS يُكمل عملية بيع
 | ADR-34 | إضافة حقول إسناد موظف اختيارية (`createdByEmployeeId`, `completedByEmployeeId`, `preparedByEmployeeId`, `servedByEmployeeId`) لأحداث دورة حياة الطلب — لأغراض Reporting فقط (Top Cashiers/Baristas)، دون أي شرط تشغيلي جديد | معتمد |
 | ADR-35 | Reporting مُصمَّم كـ Pure Read Model Domain: لا يملك أي حقيقة عمل، لا ينشر أي حدث، ويستهلك كل الـ 48 حدث في RFC-002 دون استثناء. إعادة تشغيل الأحداث (Event Replay) كافية نظريًا لإعادة بناء كل تقرير من الصفر (راجع Domain-Reporting.md) | معتمد |
 | ADR-36 | **Canonical Money:** كل قيمة مالية مشتركة تستخدم `Money { amountMinor, currencyCode }`؛ لا Floating-Point، ولا عمليات بين عملات مختلفة. Menu يملك السعر الحالي والمجدول، وSales ينسخ السعر الحالي إلى `OrderLine.unitPrice` كـ Snapshot ثابت لا يُعاد تسعيره لاحقًا | معتمد |
+| ADR-37 | **Offline-first Branch Edge:** كل فرع يشغّل Vendor-managed Windows Edge + PostgreSQL محلية مشتركة عبر LAN، ويستمر في الدورة التشغيلية لأيام دون Internet. Cloud Supabase يبقى مركز الإدارة والتجميع؛ المزامنة Application-level Outbox/Inbox وفق ملكية Single-writer، وليست PostgreSQL replication أو Customer-managed Self-hosting (RFC-006) | معتمد |
 
 ---
 

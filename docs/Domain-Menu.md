@@ -204,6 +204,13 @@
 
 ---
 
+## 12A. Offline-first execution constraint (RFC-006)
+
+- Menu definitions والأسعار الحالية/المستقبلية Cloud-authoritative وتصل للEdge كـversioned snapshots.
+- Edge لا يؤلف تغييرات Menu مركزية Offline؛ يخدم آخر snapshot صالح لـSales/Fulfillment.
+- السعر المجدول الواصل قبل الانقطاع يتفعّل محليًا عند `effectiveFrom`؛ التعديل الأحدث ينتظر sync.
+- تطبيق snapshot وEdge Inbox acknowledgement atomic وidempotent؛ resource version الأقدم/المساوي لا يُعاد تطبيقه.
+
 ## 13. Future Extensions
 
 - **Multi-language Menu Content:** دعم أسماء ووصف المنتجات بأكثر من لغة (عربي/إنجليزي) كحقول i18n صريحة — متوافق مع مبدأ Bilingual من اليوم الأول في Product Bible.

@@ -201,6 +201,13 @@
 
 ---
 
+## 12A. Offline-first execution constraint (RFC-006)
+
+- `Create Order`, `OrderPlaced`, Sale completion, cash payment، وتسجيل الدفع الخارجي المؤكد تُحسم على Branch Edge دون Cloud.
+- Order/Sale/PaymentStatus Branch-authoritative وimmutable بعد الإتمام؛ Cloud ingestion لا يستخدم Last-write-wins.
+- Business state وLocal Outbox يلتزمان atomically؛ retry لا يكرر business effect.
+- Sales تستخدم آخر Menu/Settings/access projections متزامنة، والواجهة التشغيلية تستدعي Edge API عبر LAN وتعرض Sync state.
+
 ## 13. Future Extensions
 
 - **Payments Domain مستقل:** فصل منطق بوابات الدفع الفعلية عن Sales عند الحاجة لدعم وسائل دفع إلكترونية متعددة.

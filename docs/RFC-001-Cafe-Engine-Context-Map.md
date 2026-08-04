@@ -48,6 +48,14 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 > **تحديث ثالث:** أُضيف Domain جديد: **Shift Management** (فتح/قفل الشيفت، الدرج النقدي، فروقات النقدية) كجزء من MVP.
 > **تحديث رابع:** أُضيف Domain جديد: **Suppliers & Business Accounts** — يفصل الالتزامات المالية تجاه الموردين (Supplier Master Data, Accounts Payable, Payments, Aging) عن العمليات التشغيلية للشراء (Purchasing). راجع القسم 4.6.
 
+### 3.4 Offline-first Deployment Boundary
+
+`Branch Edge` وCloud Sync **ليسا Business Domains** ولا يملكان حقائق Cafe تجارية. هما Platform Infrastructure ينقل ويخزن حقائق الدومينات دون تغيير ملكيتها:
+
+- Sales وOrder Fulfillment وShift Management وحركات Inventory الخاصة بالفرع تكتب محليًا على Edge الفرع أولًا.
+- Menu/Settings/User access master data تُدار في Cloud وتصل كنسخ versioned للEdge.
+- كل اتصال عابر للEdge/Cloud يمر عبر Outbox/Inbox وفق RFC-006؛ لا استدعاء Domain مباشر ولا Database replication ولا Last-write-wins.
+
 ---
 
 ## 4. Domain-by-Domain Boundaries
@@ -74,6 +82,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 
 **Owned Concepts:** Order, OrderLine, Sale, Invoice (Transaction Representation), Discount (Applied), Payment Status
 
+**Offline authority:** فرع البيع هو الكاتب الوحيد لـOrder/Sale/PaymentStatus التشغيلية. Cash يعمل Offline؛ الدفع الخارجي لا يُسجَّل Approved إلا بعد تأكيد مستقل. تُزامَن الحقائق للسحابة دون إعادة كتابتها أو حسمها بـtimestamp (RFC-006 §§3, 6).
+
 ---
 
 ### 4.2 Order Fulfillment (Kitchen Operations)
@@ -96,6 +106,7 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 **ملاحظات معمارية:**
 - هذا الفصل عن Sales يفتح الباب مستقبلًا (Phase 2/3) لـ: Kitchen Display System (KDS)، شاشة الباريستا، طابور الطلبات (Order Queue)، QR Ordering، وتكامل التوصيل (Delivery Integration) — **دون أي تلوث لمنطق Sales**.
 - في MVP: التنفيذ قد يكون مبسّطًا (حالة واحدة بسيطة لكل طلب بدل محطات متعددة)، لكن **الحدود المعمارية بين Sales وOrder Fulfillment ثابتة من اليوم الأول** حتى لو الواجهة في MVP بسيطة.
+- Order Fulfillment يعمل على نفس Branch Edge ويظل متاحًا لأجهزة المطبخ عبر LAN دون Internet؛ حالات التحضير Branch-authoritative وتُزامَن لاحقًا.
 
 ---
 
@@ -120,6 +131,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 > **قرار حاسم مرتبط بـ Sales:** **لا يجوز إتمام أي معاملة بيع (`SaleCompleted`) إلا في ظل وجود شيفت مفتوح فعليًا** لنفس الفرع/الكاشير. هذا القيد أُضيف كـ Business Precondition صريح على `SaleCompleted` في RFC-002. Sales يحتفظ بنسخة محلية (Read Model) لحالة "هل يوجد شيفت مفتوح؟" عبر الاستماع لأحداث `ShiftOpened`/`ShiftClosed` — وليس عبر استدعاء مباشر لـ Shift Management.
 >
 > **قرار إضافي (System Freeze v1):** **لا يجوز قفل شيفت (`ShiftClosed`) عليه طلبات مفتوحة لم تُغلَق بعد.** Shift Management يستمع لـ `OrderPlaced` (Sales) و`SaleCompleted`/`OrderCancelled`/`OrderRejected` (Sales/Order Fulfillment) للحفاظ على عدّاد محلي — هذا استثناء صريح ومقصود يجعل Shift Management "يستمع للأعلى" (Consumer لأحداث دومينز أخرى رغم كونه في ترتيب مبكر بالخريطة)، وهو متسق تمامًا مع مبدأ Event-Driven العام.
+>
+> **Offline authority:** فتح/قفل الشيفت والعداد النقدي Branch-authoritative ويعملان على Edge. Cloud لا يغلق شيفتًا بعيدًا أثناء انقطاع الفرع.
 
 ---
 
@@ -142,6 +155,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 **Owned Concepts:** MenuItem, Category, Recipe, RecipeIngredientLink (إشارة فقط لـ `stockItemId` وكمية مطلوبة — وليس تعريف المكوّن نفسه), BasePrice
 
 > **ملكية السعر:** الأسعار المجدولة تظل داخل Menu حتى لحظة نفاذها. عند النفاذ ينشر Menu حدث `MenuItemPriceChanged` بصورة idempotent؛ Sales يحتفظ بالسعر الحالي فقط ويأخذ منه Snapshot ثابت عند `OrderPlaced`. لا يؤثر أي تغيير لاحق على Orders قائمة.
+
+> **Offline authority:** Menu master data والأسعار Cloud-authoritative. Edge يستهلك snapshot versioned؛ أي سعر مجدول وصل قبل الانقطاع يُفعَّل محليًا عند `effectiveFrom`، وما أُنشئ بعد الانقطاع ينتظر المزامنة (RFC-006 §4.2).
 
 > **تصحيح معماري (بعد تعريف فلسفة Inventory Engine):** القرار السابق القائل بأن "Ingredient كسجل أساسي يُدار عبر Menu" **أصبح لاغيًا**. Menu **لا يملك أي تعريف** للمكوّن (لا اسمه، لا وحدة قياسه، لا حد إعادة طلبه) — كل هذا ينتقل بالكامل لـ **Inventory** كمالك حصري لـ `StockItem` (راجع القسم 4.5 المُحدَّث). Menu.Recipe تكتفي بالإشارة إلى `stockItemId` ككائن خارجي مُعرَّف مسبقًا في Inventory، تمامًا كما تشير Sales إلى `menuItemId` دون امتلاكه.
 
@@ -173,6 +188,7 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 > 1. **طريقة التقييم:** Weighted Average Cost في MVP؛ FIFO/Batch Tracking مؤجَّلة لـ Phase 2.
 > 2. **الرصيد السالب (Negative Stock):** سياسة قابلة للتهيئة على مستوى كل Tenant (`NegativeStockPolicy`): `Strict` (منع البيع) / `Warning` (السماح + تنبيه — الافتراضي) / `Ignore` (السماح بدون تنبيه). القيمة تُدار عبر Settings (Platform Domain) وتصل إلى Sales وInventory عبر ports محايدة وفق RFC-004 SA-ADR-06، دون أي استيراد مباشر من Platform.
 > 3. **Recipe Snapshot Immutability:** أي `StockMovement` ناتج عن بيع يُخزِّن **الكميات الفعلية المُستهلَكة كأرقام ثابتة** (وليس مرجعًا حيًا لوصفة قابلة للتغيير)، مع الاحتفاظ بمرجع لنسخة الوصفة المُستخدَمة (`recipeVersionUsed`) لأغراض التدقيق فقط. تعديل وصفة لاحقًا (`RecipeUpdated`) **لا يغيّر أبدًا** حركات مخزون سابقة بأثر رجعي.
+> 4. **Offline authority:** الحركات والجرد والقابلية التشغيلية للفرع Branch-authoritative وتُسجَّل على Edge؛ تعريفات StockItem/Recipes المُدارة مركزيًا تصل كنسخ versioned. لا تُدمج حركات مخزون متعارضة بـLast-write-wins.
 
 ---
 
@@ -256,6 +272,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 **Owned Concepts:** Employee, EmploymentStatus, BranchAssignment, Department, JobTitle, ManagerRelationship, EmploymentType, StaffNumber, DefaultShiftAssignment, BaseSalaryReference
 
 > **الفصل الحاكم (بعد بناء Staff Domain Document بالكامل):** Attendance وPayroll **لا يملكان أبدًا** بيانات الموظف — يشيران فقط لـ `employeeId` كمرجع خارجي، ويحتفظان بـ Read Models محلية مُحدَّثة من أحداث Staff (`EmployeeCreated`, `EmployeeUpdated`, `EmployeeActivated`, `EmployeeDeactivated`, `EmployeeTransferred`, `EmployeeTerminated`) — **الفجوة الموثَّقة سابقًا في كلا الدومينين مُغلَقة الآن بالكامل.**
+
+> **Offline access projection:** Staff يظل مالك بيانات الموظف، وPlatform Auth يملك credentials/capabilities. Edge يحتفظ فقط بآخر access projection للفرع وArgon2id PIN hash لمدة صلاحية قصوى 7 أيام منذ آخر مزامنة؛ لا تنتقل ملكية الموظف إلى Edge Infrastructure (RFC-006 §5).
 
 ---
 
@@ -353,6 +371,8 @@ Sales · **Order Fulfillment** · **Shift Management** · Menu · Inventory · *
 **Owned Concepts:** KPIDefinition, DailySnapshot, DashboardConfiguration, EmployeePerformanceSnapshot (كلها Read Models مُشتقة، وليست مصدر حقيقة)
 
 > **المبدأ الحاكم:** لو Reporting اختفى بالكامل، إعادة تشغيل كل الأحداث (Event Replay) كافية لإعادة بناء كل تقرير — راجع Domain-Reporting.md للتفاصيل الكاملة.
+
+> **Offline semantics:** Cloud Reporting يتقارب بعد sync ويعرض `lastSyncedAt` وحالة كل فرع؛ بيانات فرع Offline تُوسم Stale ولا تُعرض كأنها Live. تقارير التشغيل المحلية يجوز أن تقرأ projections محلية على Edge.
 
 ---
 

@@ -162,6 +162,12 @@
 
 ---
 
+## 12A. Offline-first execution constraint (RFC-006)
+
+- Fulfillment state Branch-authoritative ويعمل على نفس Edge؛ أجهزة المطبخ/الباريستا تستمر عبر LAN دون Internet.
+- استهلاك `OrderPlaced` ونشر Ready/Served/Cancelled/Rejected durable وidempotent عبر restart وsync retry.
+- Cloud downstream consolidated projection، وليس command fallback لحالة التحضير.
+
 ## 13. Future Extensions
 
 - **Kitchen Display System (KDS) / Barista Screen:** واجهات مخصصة لكل محطة تعرض الـ Order Queue الخاصة بها فقط — البنية الحالية (StationAssignment لكل بند) جاهزة لهذا دون إعادة تصميم.

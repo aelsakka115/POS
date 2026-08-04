@@ -82,6 +82,8 @@ of how much local validation is done:
 (Verified) is reached.** Bootstrap Complete (Local) is a real, meaningful
 milestone — it is not the same milestone, and is not sufficient on its own.
 
+> **Post-bootstrap architecture update (Issue #5 / RFC-006):** Bootstrap completion remains valid, but it no longer leads directly to Sales implementation. The required next milestones are Branch Edge Foundation, Sync Foundation, and Offline Authentication Foundation from RFC-004 §13 and RFC-006 §11. Issue #4 remains paused until those foundations have approved Engineering Issues and the Sales slice is re-baselined for local Edge PostgreSQL + Outbox.
+
 ---
 
 *This plan is executed as-is. Any deviation discovered mid-execution goes through RFC-005 §6, not an ad-hoc change to this document.*

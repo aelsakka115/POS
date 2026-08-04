@@ -69,6 +69,15 @@ If the task has no criterion that traces to a documented rule, the task is Not R
 
 > If "No," the task is **Not Ready** — the boundary must be clarified in RFC-001 first, not decided during implementation.
 
+### Offline-first / Branch Edge Check
+
+**Does this task touch Edge, Cloud, Sync, Auth, Deployment, or an operational domain?**
+
+- [ ] Yes — authority, Offline behavior, and sync path are traced to RFC-006
+- [ ] N/A — the task cannot affect branch operation or synchronization
+
+> An affected task without an explicit RFC-006 trace is **Not Ready**.
+
 ---
 
 ## 6. Readiness Verdict
