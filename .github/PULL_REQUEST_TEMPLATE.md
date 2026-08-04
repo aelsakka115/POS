@@ -24,6 +24,7 @@ Do not remove sections. If a section is not applicable, mark it explicitly as N/
 - [ ] **No business rules duplicated** — no business rule already defined in another domain's Domain Document is re-implemented here.
 - [ ] **Capability gating implemented where required** — every new/changed endpoint or UI element tied to a Capability ID from RFC-003 checks it explicitly (RFC-003 §10, RFC-004 §6.5/§7.4).
 - [ ] **Events and contracts match RFC-002 / RFC-003** — every event name, payload field, and Capability ID used here matches `packages/domain-contracts` exactly, with no local re-definition or renaming.
+- [ ] **Offline-first authority respected** — affected operational writes use Branch Edge; Cloud/master-data writes and sync use the ownership, Outbox/Inbox, and idempotency rules in RFC-006 (or mark N/A).
 
 If any box above is unchecked, explain why in **Reviewer Notes**.
 
@@ -34,6 +35,7 @@ If any box above is unchecked, explain why in **Reviewer Notes**.
 - [ ] Appropriate tests added or updated for the behavior in this PR (RFC-004 §8).
 - [ ] Existing tests pass locally / in CI.
 - [ ] No known regression introduced (or, if one exists, it is explicitly called out below with justification).
+- [ ] For RFC-006-affected work, Offline/restart/retry/reconnect/staleness scenarios appropriate to the scope pass (or mark N/A with reason).
 
 ---
 

@@ -25,7 +25,8 @@ Before writing any code, read the following **in this exact order**. This is not
 5. **Master-System-Flow.md** — the consolidated end-to-end picture
 6. **RFC-004** — software architecture (how we build)
 7. **RFC-005** — engineering workflow (how we work)
-8. **The specific Domain Document** for whatever you're about to touch (e.g. `Domain-Sales.md`)
+8. **RFC-006** — mandatory for Edge, Cloud, Sync, Auth, Deployment, or any operational-domain task
+9. **The specific Domain Document** for whatever you're about to touch (e.g. `Domain-Sales.md`)
 
 Skipping steps is the single most common cause of PRs that violate domain boundaries.
 

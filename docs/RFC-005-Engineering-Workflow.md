@@ -51,7 +51,7 @@ Task تظهر → فحص Definition of Ready (§3.1)
 
 ### 2.3 قاعدة بدء الجلسة (Session Bootstrapping)
 
-أي AI Agent يبدأ أي جلسة عمل **يقرأ `docs/` أولًا** (Product Bible → RFC-004) قبل كتابة أي كود — امتداد مباشر لـ RFC-004 §11 Rule 5، وليس قاعدة جديدة.
+أي AI Agent يبدأ أي جلسة عمل **يقرأ `docs/` أولًا** بالترتيب: Product Bible → RFC-001/002/003 → Master System Flow → RFC-004 → RFC-005 → **RFC-006 لأي مهمة تمس Edge/Cloud/Sync/Auth/Deployment** → Domain Document المعني، قبل كتابة أي كود.
 
 ### 2.4 بروتوكول تسليم بين الـ Agents (Handoff)
 
@@ -74,6 +74,7 @@ Task تظهر → فحص Definition of Ready (§3.1)
 - أي Event أو Capability ID مطلوب **موثَّق بالفعل** في RFC-002/003 — لا افتراض "هنضيفه أثناء التنفيذ".
 - معايير القبول (Acceptance Criteria) مذكورة بوضوح، مُشتقة من Business Rules الموثَّقة، وليست تفسيرًا شخصيًا للـ Agent المنفِّذ.
 - لو المهمة بتلمس أكتر من دومين، حدود المسؤولية بين الدومينز واضحة من RFC-001 (لا "هنكتشف أثناء التنفيذ").
+- أي مهمة تشغيلية في Sales/Fulfillment/Shift/Menu/Inventory تحدد صراحةً هل البيانات Branch-authoritative أم Cloud-authoritative، ومسارها عبر Edge/Sync وفق RFC-006.
 
 **لو أي شرط غير مُستوفى → المهمة ترجع لمصدرها (Domain Document/RFC) قبل أي كود، مش تتنفَّذ بافتراض.**
 
@@ -85,6 +86,7 @@ Task تظهر → فحص Definition of Ready (§3.1)
 - اختبارات موجودة تتماشى مع هرم RFC-004 §8.
 - التوثيق مُحدَّث وفق Documentation Update Policy (§4) — لو المهمة غيّرت سلوكًا موثَّقًا.
 - لا Business Rule اتغيّرت بدون المرور بـ Change Management Process (§5) أولًا.
+- المهام المتأثرة بـRFC-006 تختبر الوضع Offline، restart، duplicate delivery، reconnect، وstaleness/health المناسبة لنطاقها؛ نجاح Cloud-only لا يحقق Definition of Done.
 
 ---
 

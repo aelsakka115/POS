@@ -46,6 +46,7 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 | **Vite** | Build Tool للواجهة | أسرع من Webpack بشكل كبير في Dev Mode، دعم ممتاز لـ TypeScript وTailwind بدون إعداد معقَّد |
 | **Supabase** | Backend Platform (Postgres + Auth + Storage + Realtime) | قرار مُثبَّت بالفعل في Product Bible §5.6 — يُستخدَم عبر طبقات Abstraction إلزامية (`IAuthService`, `IStorageService`, `IRealtimeService`) وليس مباشرة |
 | **PostgreSQL** | قاعدة البيانات | يدعم Row-Level Security (أساس عزل الـ Tenants المُقرَّر في Product Bible)؛ آلية تشغيل الـ Dispatcher والمهام غير المتزامنة تفصيل بنية تحتية مؤجَّل (راجع القسم 14)، وليس سببًا معماريًا لاختيار Postgres نفسه |
+| **Windows Service + Local PostgreSQL** | Branch Edge Runtime | يشغّل الـBackend التشغيلي وقاعدة الفرع المشتركة عبر LAN لأيام دون Internet؛ يظل Domain/Application code محايدًا ويُفصَّل النقل والمزامنة في RFC-006 |
 | **Tailwind CSS** | نظام التنسيق | Utility-first يطابق فلسفة Design Tokens (القسم 9)؛ دعم ممتاز لـ RTL/LTR عبر Logical Properties |
 | **shadcn/ui** | مكتبة مكوّنات أساسية | مكوّنات قابلة للتعديل الكامل (مش Black-box Library) — تدعم "Configuration over Customization"، ومبنية على Radix (Accessibility جاهزة) |
 | **React Query (TanStack Query)** | إدارة حالة السيرفر | يطابق تمامًا نمط Read Models/Eventually Consistent المُتبَع في كل الـ Domain Documents — Caching وInvalidation وRefetching جاهزين |
@@ -72,7 +73,7 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 
 ### 3.1 Modular Monolith — التطبيق المباشر
 
-كل الـ 13 Domain في RFC-001 تُبنى كوحدات (Modules) منفصلة **داخل نفس الـ Codebase والـ Deployment الواحد** (لا Microservices — Product Bible ADR-03، صمد عبر كل الـ System Freeze). كل Module:
+كل الـ 13 Domain في RFC-001 تُبنى كوحدات (Modules) منفصلة **داخل نفس الـCodebase والـModular Monolith** (لا Microservices). الـMonolith له Edge وCloud composition roles وفق §3.5، دون نشر كل Domain كخدمة مستقلة. كل Module:
 - له مجلد مستقل بنفس اسم الـ Domain بالضبط.
 - يملك طبقاته الثلاث (Domain/Application/Infrastructure — القسم 6)، ويلتزم بقواعد الاعتماد الصريحة (القسم 5).
 - **لا يستورد كودًا من مجلد Module آخر مباشرة** إلا عبر Read Models أو Event Bus — نفس قاعدة "لا استدعاءات مباشرة بين الدومينز" لكن الآن على مستوى ملفات الكود.
@@ -82,8 +83,8 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 كل الـ 48 حدث الموثَّقة في RFC-002 تُنفَّذ عبر **Transactional Outbox Pattern** — نمط معماري مستقل تمامًا عن أي آلية تشغيل بعينها:
 
 1. أي Domain يكتب تغييرًا في قاعدة البيانات (مثال: `SaleCompleted`) يكتب **في نفس الـ Transaction** سجلًا في جدول `event_outbox` (tenant_id, event_type, payload, created_at, published_at?).
-2. **عملية Dispatcher غير متزامنة** (Asynchronous، آلية التشغيل الفعلية — مجدولة، أو مبنية على طابور، أو غير ذلك — قرار تنفيذي منفصل، راجع القسم 14) تقرأ الأحداث غير المنشورة **بترتيب `created_at` لكل `tenant_id`** وتُوزِّعها على المستمعين.
-3. هذا النمط هو **الضمان المعماري** وراء RFC-002 §17 Rule 8 (Per-Tenant Ordered Delivery) — بدونه، الضمان يبقى نصًا نظريًا فقط. **آلية تشغيل الـ Dispatcher نفسها (الجدولة الزمنية، الاستدعاء عند الحدث، أو غيرها) تفصيل بنية تحتية، وليست قرارًا معماريًا** — راجع القسم 14 (SA-ADR) للفصل الصريح بين الاثنين.
+2. **عملية Dispatcher غير متزامنة** تقرأ الأحداث غير المنشورة بترتيب Outbox المحلي الحتمي. داخل Edge يُخصَّص `originSequence` متزايد لكل `tenantId + branchId + originNodeId` قبل الإرسال؛ `created_at` لا يحكم الترتيب بين العقد (RFC-006 §4).
+3. هذا النمط هو الضمان وراء RFC-002 §17 Rule 8: ترتيب حتمي محليًا، وPer-Origin ordered delivery عبر Edge/Cloud. بدون Outbox و`originSequence` يبقى الضمان نصيًا فقط؛ آلية تشغيل Dispatcher قابلة للتغيير دون تغيير العقد.
 
 > **لماذا Outbox وليس استدعاء مباشر لكل مستمع وقت الكتابة؟** يضمن Atomicity (التغيير + الحدث ينجحان أو يفشلان معًا)، ويمنع فقدان أحداث عند تعطّل مؤقت لأي مستهلك. **هذا الضمان لا يعتمد على أي تقنية تشغيل مُحدَّدة** — Outbox هو العقد المعماري؛ طريقة "تفريغه" فعليًا قرار تنفيذي منفصل يتغيّر بحرية دون المساس بالعقد نفسه.
 
@@ -97,6 +98,15 @@ RFC-004 يُثبِّت **الالتزامات المعمارية** (حدود، �
 - **Command Side:** كل Domain يكتب لجداوله الخاصة (Source of Truth) عبر Application Layer يفرض الـ Business Rules.
 - **Query Side:** Reporting (وكل Read Model محلي آخر) يقرأ من Projections منفصلة، محسَّنة للقراءة، لا علاقة لها بجداول الكتابة الأصلية.
 - **لا Event Sourcing كامل** (إعادة بناء الحالة بالكامل من الأحداث في كل قراءة) — هذا تعقيد غير مطلوب في MVP (YAGNI)، رغم أن Domain-Reporting.md §1 يُثبِّت أن "إعادة التشغيل نظريًا ممكنة" كمبدأ تصميم، وليس كآلية تشغيل يومية فعلية.
+
+### 3.5 Offline-first Branch Edge
+
+الـModular Monolith له Composition Roots للبنية المحلية والسحابية دون تغيير Domain/Application code:
+
+- `Branch Edge`: Windows Service + PostgreSQL محلية، مربوطة بفرع واحد، وهي مسار أوامر التشغيل عبر LAN.
+- `Cloud`: Supabase/PostgreSQL للإدارة المركزية وتجميع الفروع والتقارير.
+- المزامنة Application-level باستخدام Edge/Cloud Outbox وInbox ونسخ Configuration versioned وفق RFC-006؛ **لا PostgreSQL replication ثنائي الاتجاه**.
+- Edge هو الكاتب الوحيد للمعاملات التشغيلية الخاصة بفرعه، وCloud هو الكاتب الوحيد للـmaster data والإعدادات. Last-write-wins ممنوع للبيانات المالية والتشغيلية.
 
 ---
 
@@ -212,6 +222,8 @@ API  →  Application  →  Domain
 - **كل جدول يحمل `tenant_id` إلزاميًا**، مع عزل مُطبَّق على مستوى قاعدة البيانات (Row-Level Security) بناءً على هوية الـ Tenant المُستخرَجة من سياق الطلب المُصادَق عليه. **الآلية التقنية الدقيقة لحقن هوية الـ Tenant في سياق كل استعلام (Session Variables، Connection Pooling Strategy، أو غيرها) تفصيل بنية تحتية** — مؤجَّلة لوثيقة Infrastructure مستقبلية (راجع القسم 14).
 - جدول `event_outbox` مشترك (وليس لكل Domain جدول منفصل) — يسهِّل الـ Dispatcher الموحَّد.
 - Migrations مُنظَّمة بترتيب زمني، لكن **مُجمَّعة بمجلد فرعي لكل Domain** لسهولة التتبع.
+- نفس Domain migrations التشغيلية قابلة للتطبيق على Branch PostgreSQL وCloud ingestion/projection stores حيث يلزم، لكن جداول المزامنة (`sync_outbox`, `sync_inbox`, cursors, quarantine) مملوكة للبنية التحتية وليست لأي Business Domain.
+- جداول Edge التشغيلية تحمل `branch_id` بالإضافة إلى `tenant_id`، وتفرض RLS والـEdge binding؛ قاعدة محلية لا تعني إلغاء عزل الـTenant أو الـBranch.
 
 ### 6.4 آلية نشر الأحداث (العقد المعماري، بمعزل عن آلية التشغيل)
 
@@ -224,6 +236,8 @@ API  →  Application  →  Domain
                     ↓
 [كل Handler] → يُحدِّث Read Model الخاص به، أو يُنفِّذ منطق Application Layer المرتبط
 ```
+
+داخل Edge، Event Router يحدّث المستهلكين المحليين أولًا. الرسائل المطلوبة سحابيًا تُرسل عبر Sync Outbox/Inbox بعقد RFC-006: at-least-once transport + durable idempotency + ordered `originSequence`. `created_at` ليس مفتاح ترتيب للمزامنة بين العقد.
 
 ### 6.5 تطبيق RFC-003 (Capabilities) في الكود
 
@@ -259,6 +273,8 @@ Sales لا يستورد `platform/domain` أو `platform/application` أو `plat
 ---
 
 ## 7. Frontend Architecture
+
+الواجهات التشغيلية تتصل دائمًا بـBranch Edge عبر LAN. لا تتصل مباشرة بPostgreSQL أو Supabase ولا تتحول تلقائيًا لمسار Cloud أثناء تعطل Edge. تعرض حالة `Online`/`Offline`/`Syncing`/`Sync Attention Required`، بينما React Query تبقى Cache وليست مصدر الحقيقة Offline.
 
 ### 7.1 التنظيم Feature-First
 
@@ -419,11 +435,13 @@ Fowler يربط قرار التنظيف بـ **"روائح الكود" (Code Sme
 
 1. **Repository Bootstrap** — إنشاء بنية Monorepo (القسم 4)، إعداد `packages/domain-contracts` بكل الـ Zod Schemas من RFC-002/003 كخطوة أولى قبل أي كود دومين.
 2. **GitHub** — إعداد الـ Repo، الفروع، قواعد الحماية (Branch Protection)، CI الأساسي.
-3. **Supabase** — إنشاء المشروع، أول Migration (`event_outbox` + جداول Platform Domains: Auth/Tenants/Branches)، إعداد RLS الأساسي.
-4. **Claude Code** — بناء الدومينز الخلفية (Backend) **بترتيب System Freeze v1** (Sales → Order Fulfillment → Shift Management → Menu → Inventory → ... حتى Reporting)، دومين كامل (4 طبقات) قبل الانتقال للتالي.
-5. **Lovable** — بناء واجهات الـ Frontend لكل دومين مكتمل خلفيًا، بالتوازي مع تقدُّم Claude Code.
-6. **Testing** — اختبارات وحدة مع كل Domain Layer (فوري)، اختبارات E2E للسيناريوهات الحرجة (بعد اكتمال دورة تشغيلية كاملة، أول ما Sales+Inventory+Order Fulfillment تشتغل معًا).
-7. **Deployment** — بيئة Staging أولًا، اختبار قبول كامل مقابل الـ Domain Documents، ثم Production.
+3. **Cloud Bootstrap** — إنشاء Supabase، أول Migration (`event_outbox` + جداول Platform Domains)، وإعداد RLS الأساسي.
+4. **Branch Edge Foundation** — Windows Service، Local PostgreSQL، branch binding، LAN API، health، install/upgrade، والنسخ الاحتياطي وفق RFC-006.
+5. **Sync + Offline Auth Foundation** — Outbox/Inbox/cursors/idempotency، Configuration snapshots، Edge identity، PIN projection، Audit، و7-day credential window.
+6. **Backend Domains** — بناء الدومينز **بترتيب System Freeze v1** (Sales → Order Fulfillment → Shift Management → Menu → Inventory → ... حتى Reporting)، دومين كامل (4 طبقات) قبل التالي؛ الكتابات التشغيلية Branch-first.
+7. **Frontend** — واجهات كل دومين مكتمل خلفيًا تتصل بالEdge وتعرض Sync state، بالتوازي مع تقدم الـBackend.
+8. **Testing** — Unit/Integration فوري، ثم E2E للدورة المتصلة والمنقطعة وإعادة الاتصال بعد Sales+Inventory+Order Fulfillment.
+9. **Deployment** — Edge/Cloud Staging، outage وbackup/restore acceptance، ثم Production.
 
 ---
 
@@ -433,18 +451,19 @@ Fowler يربط قرار التنظيف بـ **"روائح الكود" (Code Sme
 
 | # | الالتزام المعماري (ثابت) | الآلية الحالية المُقترَحة (قابلة للتغيير، بنية تحتية) | الحالة |
 |---|---|---|---|
-| **SA-ADR-01** | **Backend Execution Independence:** منطق العمل (الطبقات الأربع، القسم 6) لا يفترض بيئة تشغيل مُحدَّدة — يجب أن يعمل بلا تعديل سواء استُضيف كدوال بلا حالة (Stateless Functions) أو كخدمة دائمة (Persistent Service) | دوال بلا حالة (Serverless) كخطوة أولى — تقلل البنية التحتية المطلوبة، تتماشى مع "سرعة التنفيذ" (Product Bible)؛ الانتقال لخدمة دائمة قرار بنية تحتية بحت لاحقًا لو قيود التنفيذ (مثل حدود زمن التنفيذ) أصبحت مشكلة فعلية | معتمد |
+| **SA-ADR-01** | **Backend Execution Independence:** Domain/Application logic لا يفترض بيئة تشغيل؛ يعمل بلا تعديل في Edge service أو Cloud worker/API | Persistent Windows Service للEdge؛ Cloud APIs/workers قد تكون stateless أو persistent حسب المهمة، داخل composition roots منفصلة | معتمد |
 | **SA-ADR-02** | **Guaranteed Ordered Event Delivery عبر Outbox:** أي حدث في RFC-002 يُنشَر عبر Transactional Outbox (القسم 3.2)، لا استدعاء مباشر متزامن بين الدومينز تحت أي ظرف | آلية "تفريغ" الـ Outbox الفعلية (جدولة زمنية، استهلاك طابور، أو غيرها) تُختار لاحقًا بمعزل تام عن هذا الالتزام | معتمد |
 | **SA-ADR-03** | **Schema-First Shared Contract:** شكل كل Event وCapability ID يُعرَّف **مرة واحدة** (`packages/domain-contracts`)، ويُشتَق منه كل من التحقق (Validation) في الـ Backend واستنتاج الأنواع (Types) في الـ Frontend — لا تعريف مزدوج لنفس الشكل بأي أداة | REST كأسلوب نقل حاليًا (الأبسط لهذا النمط)؛ اختيار بروتوكول النقل نفسه (REST/GraphQL/RPC) منفصل عن التزام "مصدر واحد للعقد" | معتمد |
 | **SA-ADR-04** | **Command/Query Separation دون Event Sourcing كامل:** جهة الكتابة (تفرض Business Rules) منفصلة تمامًا عن جهة القراءة (Read Models/Projections)، لكن **لا** إعادة بناء الحالة بالكامل من الأحداث في كل قراءة — قرار نطاق (Scope)، وليس اختيار أداة | — (هذا القرار نفسه هو الآلية، لا أداة إضافية تحتاجه) | معتمد |
 | **SA-ADR-05** | **حدود ملكية حالة السيرفر في الـ Frontend:** نسخة واحدة فقط من أي بيانات قادمة من الـ Backend تُخزَّن في الذاكرة (Single Server-State Cache) — لا تكرار لنفس البيانات في أداتين مختلفتين للحالة | React Query كتطبيق حالي لهذا الالتزام؛ أي حالة UI بحتة (لا تمثِّل بيانات سيرفر) تُدار بأداة منفصلة تمامًا لتجنّب الخلط | معتمد |
 | **SA-ADR-06** | **Domain-Neutral Tenant Configuration Port:** الدومينز لا تستورد Platform للحصول على إعدادات Tenant. Shared يعرّف `ITenantConfigurationPort` محايدًا، وكل Domain يملك outbound port الخاص بحاجته؛ Sales يملك `INegativeStockPolicyProvider` في Application ويعطي Domain القيمة المحلولة فقط | Platform Infrastructure ينفّذ الـ shared port، وSales Infrastructure يكيّفه إلى port الخاص بـSales، والـComposition Root يربط التنفيذات فقط | معتمد |
+| **SA-ADR-07** | **Offline-first Single-writer Branch Edge:** أوامر التشغيل تُحسم محليًا على Edge الفرع، والإدارة/master data تُحسم في Cloud؛ التزامن Outbox/Inbox idempotent ولا Last-write-wins أو DB replication | Vendor-managed Windows Service + Local PostgreSQL لكل فرع، Supabase Cloud، وعقد RFC-006 | معتمد |
 
 ---
 
 ## 15. Validation
 
-راجعت هذه الوثيقة مقابل Product Bible وRFC-001/002/003 وMaster-System-Flow. **لا تعارض مُكتشَف.** يحتوي السجل على **6 SA-ADRs معتمدة**؛ أُضيف SA-ADR-06 عبر Issue #2 وفق RFC-005 Engineering Decision Process.
+راجعت هذه الوثيقة مقابل Product Bible وRFC-001/002/003/006 وMaster-System-Flow. **لا تعارض مُكتشَف.** يحتوي السجل على **7 SA-ADRs معتمدة**؛ أُضيف SA-ADR-07 عبر Issue #5 وفق RFC-005 Change Management وEngineering Decision Process.
 
 ---
 

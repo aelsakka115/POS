@@ -5,6 +5,8 @@
 **Covers:** RFC-001, RFC-002, وجميع Domain Documents المعتمدة حتى تاريخه
 **Scope:** الدورة التشغيلية الكاملة الأولى للكافيه (Setup → Sale → Fulfillment → Inventory Deduction → Reporting Hooks)
 
+> **Deployment addendum (Issue #5):** تجميد قواعد العمل أدناه لا يتغير، لكن الدورة التشغيلية نفسها يجب أن تعمل على Branch Edge عبر LAN لأيام دون Internet، ثم تتزامن مع Cloud وفق RFC-006. Edge/Sync بنية تحتية ولا تغيّر ملكية أي Domain أو Event من هذا الـFreeze.
+
 ---
 
 ## 1. الغرض من هذه الوثيقة
@@ -48,7 +50,7 @@
 | W2 | لا يوجد حدث `StockItemCreated` | أُضيف + Menu وPurchasing يحتفظان بـ Read Model محلي |
 | W3 | `OrderPlaced` بلا شرط شيفت مفتوح | نفس شرط `SaleCompleted` طُبِّق من اللحظة الأولى |
 | W4 | تسمية `POS.CreateSale` غير دقيقة | أُعيدت التسمية لـ `POS.CreateOrder` |
-| W5 | ترتيب الأحداث افتراض غير موثَّق | قاعدة صريحة: Event Bus يضمن Per-Tenant Ordered Delivery |
+| W5 | ترتيب الأحداث افتراض غير موثَّق | قاعدة صريحة: Event Bus يضمن ترتيبًا حتميًا محليًا؛ وبعد RFC-006 يحافظ Sync على Per-Origin ordering بـ`originSequence` دون ادعاء ترتيب كلي بين الفروع |
 
 ### من System Freeze v1 Deep Validation Pass
 

@@ -2,7 +2,7 @@
 
 **Type:** Consolidation Reference (ليست RFC وليست Domain Document)
 **Purpose:** مرجع معماري واحد يشرح كيف يعمل Cafe Engine من طرف لطرف، بتجميع ما هو موثَّق بالفعل فقط
-**Sources:** Product Bible v1، RFC-001، RFC-002، System Freeze v1، كل Domain Documents المعتمدة
+**Sources:** Product Bible v1، RFC-001، RFC-002، RFC-004، RFC-006، System Freeze v1، كل Domain Documents المعتمدة
 **Status:** **Consolidation Reference — Approved source documents remain authoritative; changes require their RFC-005 process**
 
 ---
@@ -82,6 +82,25 @@
 ```
 
 **ملاحظة على "Payment":** لا يوجد حدث منفصل باسم Payment — الدفع جزء من `SaleCompleted` نفسه (حالة `paymentStatus`/`paymentMethod` ضمن Payload الحدث الواحد)، وليس خطوة منفصلة في تسلسل الأحداث. هذا مطابق تمامًا لتصميم Sales في RFC-002 §4.2.
+
+### 2.1 مسار التشغيل Offline-first
+
+```text
+Cloud (Menu / Settings / Access master data)
+        │ versioned snapshots عبر Cloud Outbox
+        ▼
+Branch Edge Inbox → Local PostgreSQL ← LAN clients
+        │                    │
+        │              Shift → Order → Fulfillment → Sale → Inventory
+        │                    │ atomic business state + Edge Outbox
+        └──── reconnect ─────▼
+              Cloud Inbox → consolidated Reporting
+```
+
+- انقطاع Internet لا يقطع الدورة من Shift إلى Inventory داخل الفرع.
+- Cloud-owned updates تنتظر المزامنة؛ الأسعار المجدولة التي وصلت مسبقًا تنفذ محليًا في موعدها.
+- Edge/Cloud transport at-least-once مع durable Inbox idempotency وترتيب `originSequence`؛ لا Last-write-wins أو DB replication.
+- Dashboard المركزي يعرض `lastSyncedAt` وstaleness. التفاصيل الحاكمة في RFC-006.
 
 ---
 
@@ -193,8 +212,9 @@ Payroll           → PayrollRunCompleted                          → Reporting
 | **No Direct Cross-Domain Calls** | Product Bible، صمد حتى في أصعب اختبار (Strict Policy — System Freeze v1 Finding #3) | حُلَّت كل الحالات الصعبة بـ Read Models بدل كسر القاعدة |
 | **Modular Monolith First** | Product Bible ADR-03 | لا Microservices حتى الآن؛ كل الدومينز داخل نفس الوحدة التشغيلية |
 | **Eventual Consistency كـ Trade-off موثَّق وليس ثغرة مخفية** | RFC-002 §6.6، System Freeze v1 §4 | صراحة في كل مكان يُستخدَم فيه (خصوصًا Item Availability RM) |
-| **Per-Tenant Ordered Delivery** | RFC-002 §17 Rule 8 | أساس كل قواعد الـ Immutability والـ Read Models المحلية |
+| **Deterministic Local + Per-Origin Sync Ordering** | RFC-002 §17 Rules 8/13، RFC-006 §4 | ترتيب Outbox محلي و`originSequence` لكل Edge/Cloud origin stream؛ لا ترتيب كلي مصطنع بين الفروع |
 | **Two-Layer Defense كنمط لقرارات حرجة** | Domain-Inventory.md Business Rule #4 | Sales (وقائي، Eventually Consistent) + Inventory (Backstop نهائي) — نفس النمط قابل لإعادة الاستخدام مستقبلًا لقرارات مشابهة |
+| **Offline-first Branch Edge** | Product Bible ADR-37، RFC-004 SA-ADR-07، RFC-006 | التشغيل Branch-authoritative عبر LAN لأيام، والCloud للإدارة والتجميع؛ Sync Outbox/Inbox Single-writer |
 
 ---
 
@@ -206,7 +226,7 @@ Payroll           → PayrollRunCompleted                          → Reporting
 
 ✅ **كل الـ Read Models الاثني عشر** المذكورة صراحة في Domain Documents مُجمَّعة في القسم 4 دون إضافة أو حذف.
 
-✅ **سجلات القرار متسقة:** Product Bible يحتوي 36 Business ADRs (بما فيها ADR-36)، وRFC-004 يحتوي 6 SA-ADRs (بما فيها SA-ADR-06).
+✅ **سجلات القرار متسقة:** Product Bible يحتوي 37 Business ADRs (بما فيها ADR-37)، وRFC-004 يحتوي 7 SA-ADRs (بما فيها SA-ADR-07).
 
 ✅ **لا تعارض بين RFC-001 وRFC-002** في أي نقطة تم فحصها.
 
@@ -222,7 +242,7 @@ Payroll           → PayrollRunCompleted                          → Reporting
 
 مع اكتمال **Reporting**، أصبحت كل الدومينز التشغيلية الأساسية موثَّقة بالتفصيل الكامل. Reporting بالذات يستهلك **كل الـ 48 حدث بلا استثناء واحد** — تحقق مباشر من مبدأ "لو Reporting اختفى، إعادة تشغيل الأحداث كافية لإعادة بنائه بالكامل" (Domain-Reporting.md §1).
 
-لا توجد أي فجوة أخرى أو تعارض يستدعي التوقف.
+لا توجد فجوة توثيقية متبقية داخل قرار Offline-first. تنفيذ Edge/Sync/Auth/Sales يظل متوقفًا على Engineering Issues مستقلة تمر بـDefinition of Ready وفق RFC-005.
 
 ---
 
